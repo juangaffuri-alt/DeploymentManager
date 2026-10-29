@@ -26,31 +26,39 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
+var loggerFactory = LoggerFactory.Create(logging => logging.AddSimpleConsole(o => o.SingleLine = true));
+
+// El worker/consola comparten el mismo núcleo: ReleaseSyncService.
 using var client = new AzureReleaseClient(options);
 var repository = new ReleaseRepository(options.ConnectionString);
-var loggerFactory = LoggerFactory.Create(logging => logging.AddSimpleConsole(o => o.SingleLine = true));
-var logger = loggerFactory.CreateLogger("AzureReleasesSync");
+var service = new ReleaseSyncService(
+    options,
+    client,
+    repository,
+    loggerFactory.CreateLogger<ReleaseSyncService>());
 
-logger.LogInformation(
+var startupLogger = loggerFactory.CreateLogger("AzureReleasesSync");
+
+startupLogger.LogInformation(
     "AzureReleasesSync iniciado. Definiciones: {Count} | Backfill inicial: {Backfill} días | Overlap incremental: {Overlap} días",
     options.Definitions.Count, options.BackfillDays, options.OverlapDays);
 
-var service = new ReleaseSyncService(options, client, repository, logger);
-
 try
 {
-    var exitCode = await service.RunAsync(forceFullBackfill, cts.Token);
-    logger.LogInformation("Exit code: {ExitCode} (0 = todo ok)", exitCode);
-    return exitCode;
+    var result = await service.RunAsync(forceFullBackfill, cts.Token);
+    startupLogger.LogInformation(
+        "Corrida finalizada: {Upserted} releases, {Errors} errores, truncado={Truncated}. Exit code: {ExitCode} (0 = todo ok)",
+        result.ReleasesUpserted, result.Errors, result.Truncated, result.Success ? 0 : 1);
+    return result.Success ? 0 : 1;
 }
 catch (OperationCanceledException)
 {
-    logger.LogWarning("Sincronización cancelada por el usuario.");
+    Console.WriteLine("Sincronización cancelada por el usuario.");
     return 130;
 }
 catch (Exception ex)
 {
-    logger.LogError(ex, "Fallo fatal en la sincronización de releases.");
+    Console.Error.WriteLine($"Fallo fatal en la sincronización de releases: {ex}");
     return 2;
 }
 

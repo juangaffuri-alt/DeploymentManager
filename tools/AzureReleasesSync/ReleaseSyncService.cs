@@ -9,15 +9,15 @@ namespace AzureReleasesSync;
 public sealed class ReleaseSyncService
 {
     private readonly SyncOptions _options;
-    private readonly AzureReleaseClient _client;
+    private readonly IAzureReleaseClient _client;
     private readonly ReleaseRepository _repository;
-    private readonly ILogger<Program> _logger;
+    private readonly ILogger<ReleaseSyncService> _logger;
 
     public ReleaseSyncService(
         SyncOptions options,
-        AzureReleaseClient client,
+        IAzureReleaseClient client,
         ReleaseRepository repository,
-        ILogger<Program> logger)
+        ILogger<ReleaseSyncService> logger)
     {
         _options = options;
         _client = client;
@@ -29,7 +29,7 @@ public sealed class ReleaseSyncService
     /// Corre una sincronización. Con <paramref name="forceFullBackfill"/> ignora el watermark
     /// y pide <see cref="SyncOptions.BackfillDays"/> días hacia atrás.
     /// </summary>
-    public async Task<int> RunAsync(bool forceFullBackfill, CancellationToken ct)
+    public async Task<SyncRunResult> RunAsync(bool forceFullBackfill, CancellationToken ct)
     {
         var startedAtUtc = DateTime.UtcNow;
         var runId = await _repository.BeginRunAsync(startedAtUtc, ct);
@@ -94,26 +94,32 @@ public sealed class ReleaseSyncService
             }
         }
 
-        var success = errors == 0 && !anyTruncated;
+        var result = new SyncRunResult(
+            ReleasesUpserted: releasesUpserted,
+            DefinitionsTotal: _options.Definitions.Count,
+            DefinitionsOk: definitionsOk,
+            Errors: errors,
+            Truncated: anyTruncated);
+
         await _repository.FinishRunAsync(
             runId,
             DateTime.UtcNow,
             minCreatedUtc,
             DateTime.UtcNow,
-            _options.Definitions.Count,
-            definitionsOk,
-            releasesUpserted,
-            errors,
-            anyTruncated,
-            success,
+            result.DefinitionsTotal,
+            result.DefinitionsOk,
+            result.ReleasesUpserted,
+            result.Errors,
+            result.Truncated,
+            result.Success,
             messages.Count > 0 ? string.Join(" | ", messages) : null,
             CancellationToken.None); // cerrar la corrida aunque se cancele el resto
 
         _logger.LogInformation(
             "Sincronización finalizada: {Upserted} releases, {Ok}/{Total} definiciones ok, {Errors} errores, truncado={Truncated}",
-            releasesUpserted, definitionsOk, _options.Definitions.Count, errors, anyTruncated);
+            result.ReleasesUpserted, result.DefinitionsOk, result.DefinitionsTotal, result.Errors, result.Truncated);
 
-        return success ? 0 : 1;
+        return result;
     }
 
     /// <summary>
