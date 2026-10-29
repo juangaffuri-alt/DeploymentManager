@@ -4,8 +4,9 @@ namespace AzureReleasesSync;
 
 /// <summary>
 /// Cliente de la API REST de Release (vsrm) de Azure DevOps.
+/// Hereda IDisposable porque cada corrida (consola o worker) crea y descarta su propio cliente.
 /// </summary>
-public interface IAzureReleaseClient
+public interface IAzureReleaseClient : IDisposable
 {
     /// <summary>Lista releases de una definición creados en la ventana [minCreatedUtc, maxCreatedUtc).</summary>
     Task<AzureReleasePageResult> ListReleasesAsync(
@@ -27,16 +28,19 @@ public sealed class AzureReleaseClient : IAzureReleaseClient, IDisposable
     private readonly HttpClient _http;
     private readonly SyncOptions _options;
 
+    /// <summary>Crea su propio HttpClient (lo descartan tanto la consola como el worker al terminar).</summary>
     public AzureReleaseClient(SyncOptions options)
     {
         _options = options;
-        _http = new HttpClient
-        {
-            Timeout = TimeSpan.FromMinutes(5),
-        };
+        _http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
         var token = Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes($":{options.PersonalAccessToken}"));
         _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", token);
     }
+
+    public void Dispose() => _http.Dispose();
+
+    /// <summary>Fábrica usada por el worker/ITask para crear un cliente nuevo por corrida.</summary>
+    public static IAzureReleaseClient Create(SyncOptions options) => new AzureReleaseClient(options);
 
     /// <summary>
     /// Lista releases de una definición creados en la ventana [minCreatedUtc, maxCreatedUtc).
@@ -111,8 +115,6 @@ public sealed class AzureReleaseClient : IAzureReleaseClient, IDisposable
 
         return null;
     }
-
-    public void Dispose() => _http.Dispose();
 }
 
 /// <summary>Página completa de releases de una definición.</summary>
