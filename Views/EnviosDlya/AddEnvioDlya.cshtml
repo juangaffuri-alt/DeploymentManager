@@ -1,0 +1,597 @@
+﻿@using System.Text.Encodings.Web
+@using System.Text
+@model PasadorScript.ViewModels.EnvioDlyaRequestViewModel
+@section Styles {
+
+    <link rel="stylesheet" href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css" />
+    <script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
+    <!-- AGREGAR esto -->
+    <script src="https://cdn.jsdelivr.net/npm/@@zip.js/zip.js@2.7.44/dist/zip.min.js"></script>
+    <script>
+        // Configurar zip.js
+        zip.configure({ useWebWorkers: false }); // ← false para evitar problemas con Web Workers
+
+        // Ya está disponible globalmente como window.zip
+        console.log('zip.js cargado:', typeof zip);
+    </script>
+
+    <link rel="stylesheet" href="~/css/TreeHelp.css" />
+}
+@{
+    ViewData["Title"] = "Editor de Archivos y Subida";
+}
+
+<div class="page-header">
+    <h3 class="fw-bold mb-3">Nuevo envío Dlya</h3>
+</div>
+
+<form id="form-virtual-files" method="post">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-3">
+                                <div class="form-group">
+                                    <label class="form-label" asp-for="Tipo"></label>
+                                    <div class="selectgroup w-100">
+                                        @{
+                                            var selectList = ViewBag.TiposCambios as SelectList;
+                                        }
+                                        @foreach (var item in selectList)
+                                        {
+                                            <label class="selectgroup-item">
+                                                <input type="radio"
+                                                       value="@item.Value"
+                                                       class="selectgroup-input" asp-for="Tipo" />
+                                                <span class="selectgroup-button" for="tipo_@item.Value">@item.Text</span>
+                                            </label>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-2">
+                                <div class="form-group">
+                                    <label asp-for="Numero" class="form-label"></label>
+                                    <input asp-for="Numero" class="form-control form-control" />
+                                    <span asp-validation-for="Numero" class="text-danger"></span>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="form-group">
+                                    <label class="form-label">Hotfix</label>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" asp-for="IsHotfix" id="isHotfix" />
+                                        <label class="form-check-label" for="isHotfix" title="Al ser true, el rol de Implementación y control podrá sobreescribir el de QA y que el pasaje siga su curso. Caso contrario, se requiere la aprobación de QA">Eventual excepción de QA</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="form-group">
+                                    <label asp-for="RepositoryId" class="form-label"></label>
+                                    <select asp-for="RepositoryId" asp-items="ViewBag.Aplicativos" class="form-control">
+                                    </select>
+                                    <span asp-validation-for="RepositoryId" class="text-danger"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="form-group">
+                                    <label asp-for="Descripcion" class="form-label"></label>
+                                    <input type="text" asp-for=Descripcion class="form-control form-control" />
+                                    <span asp-validation-for="Descripcion" class="text-danger"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <partial name="_TablaTareas" model='new PasadorScript.ViewModels.TablaTareasPartialModel { TareasJson = Model.TareasJson, Editable = true, InputName = "TareasJson" }' />
+
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                            <h5 class="card-subtitle text-muted mb-0">
+                                                Archivos o scripts
+                                                <span id="files-counter" class="badge bg-primary ms-2">0 archivos</span>
+                                            </h5>
+                                            <span asp-validation-for="JsonVirtualFiles" class="text-danger"></span>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row" style="overflow-y:scroll; max-height:200px">
+                                            <div>
+                                                <input type="hidden" asp-for="JsonVirtualFiles"
+                                                       data-val="true"
+                                                       data-val-required="Agregá al menos un archivo o agregalo desde un template" />
+                                                <input type="hidden" id="JsonZipData" name="JsonZipData" />
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="card">
+                                                    <div class="card-header">
+                                                        <div class="card-title mb-0">
+                                                            <i class="fas fa-box-open me-2"></i>
+                                                            Subir archivo
+                                                        </div>
+                                                    </div>
+                                                    <div class="card-body">
+                                                        <div id="DropzoneArea"></div>
+                                                    </div>
+                                                    <div class="card-footer">
+                                                        <button id="btnAddFiles" class="btn btn-primary">Agregar archivos</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="card">
+                                                    <div class="card-header">
+                                                        <div class="card-title mb-0">
+                                                            <i class="fas fa-box-open me-2"></i>
+                                                            Estructura Original del ZIP
+                                                        </div>
+                                                    </div>
+                                                    <div class="card-body">
+                                                        <div class="tree">
+                                                            <div><strong><i class="fas fa-box file-icon text-primary"></i>mi-proyecto-v1.2.zip</strong></div>
+                                                            <div><span class="tree-line">└── </span><i class="fas fa-folder-open folder-icon"></i><span class="eliminated">Aplicacion/</span><span class="comment">← Este directorio se ELIMINA</span></div>
+                                                            <div><span class="tree-line">&nbsp;&nbsp;&nbsp;&nbsp;├── </span><i class="fas fa-folder-open folder-icon"></i>WEB-INF/</div>
+                                                            <div><span class="tree-line">&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;└── </span><i class="fas fa-folder-open folder-icon"></i>classes/</div>
+                                                            <div><span class="tree-line">&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── </span><i class="fas fa-folder-open folder-icon"></i>com/</div>
+                                                            <div><span class="tree-line">&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── </span><i class="fas fa-folder-open folder-icon"></i>empresa/</div>
+                                                            <div><span class="tree-line">&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── </span><i class="fas fa-file-code file-icon text-primary"></i>MiClase.class</div>
+                                                            <div><span class="tree-line">&nbsp;&nbsp;&nbsp;&nbsp;├── </span><i class="fas fa-folder-open folder-icon"></i>static/</div>
+                                                            <div><span class="tree-line">&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;└── </span><i class="fas fa-folder-open folder-icon"></i>css/</div>
+                                                            <div><span class="tree-line">&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── </span><i class="fas fa-file-code file-icon"></i>styles.css</div>
+                                                            <div><span class="tree-line">&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;└── </span><i class="fas fa-folder-open folder-icon"></i>js/</div>
+                                                            <div><span class="tree-line">&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── </span><i class="fas fa-file-code file-icon"></i>app.js</div>
+                                                            <div><span class="tree-line">&nbsp;&nbsp;&nbsp;&nbsp;├── </span><i class="fas fa-folder-open folder-icon"></i>templates/</div>
+                                                            <div><span class="tree-line">&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;└── </span><i class="fas fa-file-code file-icon"></i>index.html</div>
+                                                            <div><span class="tree-line">&nbsp;&nbsp;&nbsp;&nbsp;└── </span><i class="fas fa-file-code file-icon"></i>config.properties</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <hr class="my-4" />
+                                        <div class="row">
+                                            <div class="col-md-12">
+                                                <h5><i class="fa fa-file-code"></i> Archivos/envíos</h5>
+                                                <div id="virtual-files-container" class="row gy-3 card-container" style="overflow-y:scroll; max-height:400px"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-action">
+                        <div class="btn-group dropdown">
+                            <button class="btn btn-primary dropdown-toggle"
+                                    type="button"
+                                    data-bs-toggle="dropdown">
+                                Guardar
+                            </button>
+                            <ul class="dropdown-menu" role="menu">
+                                <li>
+                                    <input type="hidden" name="idScript" value="@Model.IdEnvioDlya" />
+                                    <button type="submit" class="dropdown-item btn-approve" formaction="/EnviosDlya/AddNewEnvioDlya">
+                                        <i class="bi bi-save me-1"></i>Guardar
+                                    </button>
+                                    <button type="submit" class="dropdown-item btn-approve-and-release" formaction="/EnviosDlya/AddNewEnvioAndCreatePR">
+                                        <i class="bi bi-share me-1"></i>Guardar y liberar
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+                        <a class="btn btn-secondary" href="@ViewBag.ReturnUrl">Volver</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<!-- Modal para selección de archivos ZIP -->
+<div class="modal fade" id="modalZipContent" tabindex="-1" aria-labelledby="modalZipContentLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-gradient-primary text-white">
+                <div class="d-flex align-items-center flex-grow-1">
+                    <i class="fas fa-archive me-3" style="font-size: 1.5rem;"></i>
+                    <div>
+                        <h5 class="modal-title mb-0" id="modalZipContentLabel">Contenido del ZIP</h5>
+                        <small class="text-white-50" id="zipFileInfo">Cargando información del archivo...</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Estadísticas del ZIP -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card text-center bg-light border-0">
+                            <div class="card-body py-3">
+                                <div class="d-flex align-items-center justify-content-center">
+                                    <i class="fas fa-files text-primary me-2" style="font-size: 1.5rem;"></i>
+                                    <div>
+                                        <h4 class="mb-0 text-primary" id="totalFilesCount">0</h4>
+                                        <small class="text-muted">Total archivos</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center bg-light border-0">
+                            <div class="card-body py-3">
+                                <div class="d-flex align-items-center justify-content-center">
+                                    <i class="fas fa-check-circle text-success me-2" style="font-size: 1.5rem;"></i>
+                                    <div>
+                                        <h4 class="mb-0 text-success" id="selectedFilesCount">0</h4>
+                                        <small class="text-muted">Seleccionados</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center bg-light border-0">
+                            <div class="card-body py-3">
+                                <div class="d-flex align-items-center justify-content-center">
+                                    <i class="fas fa-hdd text-info me-2" style="font-size: 1.5rem;"></i>
+                                    <div>
+                                        <h4 class="mb-0 text-info" id="totalSizeDisplay">0 B</h4>
+                                        <small class="text-muted">Tamaño total</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center bg-light border-0">
+                            <div class="card-body py-3">
+                                <div class="d-flex align-items-center justify-content-center">
+                                    <i class="fas fa-download text-warning me-2" style="font-size: 1.5rem;"></i>
+                                    <div>
+                                        <h4 class="mb-0 text-warning" id="selectedSizeDisplay">0 B</h4>
+                                        <small class="text-muted">Tamaño seleccionado</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controles de selección -->
+                <div class="d-flex justify-content-between align-items-center mb-3 p-3 bg-light rounded">
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="seleccionarTodos(true)">
+                            <i class="fas fa-check-double me-1"></i>
+                            Seleccionar todos
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="seleccionarTodos(false)">
+                            <i class="fas fa-times me-1"></i>
+                            Deseleccionar todos
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-info" onclick="invertirSeleccion()">
+                            <i class="fas fa-exchange-alt me-1"></i>
+                            Invertir selección
+                        </button>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="form-check form-switch me-3">
+                            <input class="form-check-input" type="checkbox" id="showOnlySelected" onchange="toggleShowOnlySelected()">
+                            <label class="form-check-label" for="showOnlySelected">
+                                <small>Solo mostrar seleccionados</small>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lista de archivos -->
+                <div id="zip-files-list" class="border rounded" style="max-height: 400px; overflow-y: auto; background: #fafafa;"></div>
+            </div>
+            <div class="modal-footer bg-light">
+                <div class="d-flex justify-content-between align-items-center w-100">
+                    <div class="text-muted">
+                        <small>
+                            <i class="fas fa-info-circle me-1"></i>
+                            <span id="selectionSummary">Selecciona al menos un archivo para continuar</span>
+                        </small>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">
+                            <i class="fas fa-times me-1"></i>
+                            Cancelar
+                        </button>
+                        <button type="button" class="btn btn-primary" id="btnAgregarSeleccionados" disabled>
+                            <i class="fas fa-plus me-1"></i>
+                            Agregar seleccionados
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Template para archivos del resumen (sin orden y sin vista previa) -->
+<script type="text/template" id="template-file-summary">
+    <div class="card mb-3 file-summary-card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+                <div>
+                    <i class="file-icon me-2"></i>
+                    <strong class="file-name"></strong>
+                    <span class="badge bg-info ms-2 file-source"></span>
+                    <span class="badge bg-secondary ms-1 file-count-badge" style="display: none;"></span>
+                </div>
+            </div>
+            <div>
+                <button class="btn btn-sm btn-danger btn-remove">Eliminar</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <small class="text-muted">Ruta procesada:</small><br>
+                    <span class="file-path text-truncate d-block"></span>
+                </div>
+                <div class="col-md-2">
+                    <small class="text-muted">Tamaño:</small><br>
+                    <span class="file-size"></span>
+                </div>
+                <div class="col-md-2">
+                    <small class="text-muted">Tipo:</small><br>
+                    <span class="file-type"></span>
+                </div>
+                <div class="col-md-2">
+                    <small class="text-muted">Fecha:</small><br>
+                    <span class="file-date"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</script>
+
+<script type="text/template" id="template-no-files">
+    <div class="card mb-3">
+        <div class="card-body text-center">
+            <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">No se han encontrado archivos</h5>
+            <p class="text-muted">Agregá archivos usando el botón de arriba o arrastrá archivos ZIP al área de carga.</p>
+        </div>
+    </div>
+</script>
+
+<style>
+    .bg-gradient-primary {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    }
+
+    .file-item {
+        transition: all 0.2s ease;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        margin-bottom: 8px;
+    }
+
+        .file-item:hover {
+            background-color: #f8f9fa !important;
+            border-color: #dee2e6;
+        }
+
+        .file-item.selected {
+            background-color: #e3f2fd !important;
+            border-color: #2196f3;
+            box-shadow: 0 2px 8px rgba(33, 150, 243, 0.2);
+        }
+
+    .form-check-input:checked {
+        background-color: #007bff;
+        border-color: #007bff;
+    }
+
+    .stats-card {
+        transition: transform 0.2s ease;
+    }
+
+        .stats-card:hover {
+            transform: translateY(-2px);
+        }
+
+    #zip-files-list {
+        scrollbar-width: thin;
+        scrollbar-color: #c1c1c1 #f1f1f1;
+    }
+
+        #zip-files-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #zip-files-list::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        #zip-files-list::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+            #zip-files-list::-webkit-scrollbar-thumb:hover {
+                background: #a8a8a8;
+            }
+
+    .file-count-badge {
+        font-size: 10px;
+    }
+
+    .modal-xl .modal-content {
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+</style>
+
+@section Scripts {
+    <partial name="_TablaTareasScripts" />
+    <script src="~/js/EnviosDlya.js"></script>
+    <script>
+        // Inicializar Dropzone
+        Dropzone.autoDiscover = false;
+
+
+
+        // Inicialización
+        document.addEventListener("DOMContentLoaded", async (e) => {
+            const form = document.getElementById("form-virtual-files");
+
+            // Inicializar contador
+            updateFilesCounter();
+
+            form.addEventListener("submit", async function (e) {
+                e.preventDefault();
+                const submitter = e.submitter;
+
+                if (submitter && submitter.hasAttribute("formaction")) {
+                    form.action = submitter.getAttribute("formaction");
+                }
+
+                if (!$(form).valid() || virtualFiles.length <= 0) {
+                    if ($(form).valid() && virtualFiles.length <= 0) {
+                        Swal.fire({
+                            title: "Error de validación",
+                            text: "Por favor, adjuntá un archivo o agregalo desde un template.",
+                            icon: "warning"
+                        });
+                    }
+                    return;
+                }
+
+                // Mostrar loading
+                Swal.fire({
+                    title: 'Procesando...',
+                    text: 'Guardando el archivos, por favor espera',
+                    allowOutsideClick: false,
+                    showConfirmButton: false,
+                    willOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+
+                // Preparar datos de virtualFiles (solo metadata para compatibilidad)
+                const virtualFilesData = virtualFiles.map(file => ({
+                    displayName: file.displayName,
+                    name: file._rutaOriginal,
+                    content: file.content || '', // Contenido vacío o mínimo
+                    _estado: file._estado,
+                    _hash: file._hash,
+                    _origenZip: file._origenZip || false,
+                    _rutaOriginal: file._rutaOriginal,
+                    _tamaño: file._tamaño,
+                    _fecha: file._fecha,
+                    _zipName: file._zipName,
+                    _zipFileCount: file._zipFileCount,
+                    _zipSelectedCount: file._zipSelectedCount,
+                    _esBinario: file._esBinario
+                }));
+
+                document.getElementById("JsonVirtualFiles").value = JSON.stringify(virtualFilesData);
+                if (typeof window.serializeTablaTareas === 'function' && window.serializeTablaTareas() === false) {
+                    return;
+                }
+                form.submit();
+            });
+
+            // Inicializar Dropzone
+            const dropTarget = document.getElementById("DropzoneArea");
+
+            if (!dropTarget) {
+                console.error("El elemento #DropzoneArea no existe.");
+                return;
+            }
+
+            // Limpiar cualquier instancia existente más agresivamente
+            if (dropTarget.dropzone) {
+                dropTarget.dropzone.destroy();
+            }
+
+            const dropzone = new Dropzone(dropTarget, {
+                url: "/fake-url", // URL falsa que nunca se usará
+                autoProcessQueue: false, // No procesar automáticamente
+                autoQueue: false, // No agregar a cola automáticamente
+                uploadMultiple: false, // De a uno por vez
+                parallelUploads: 1,
+                maxFiles: 1, // Solo un archivo por vez
+                paramName: "file",
+                clickable: "#btnAddFiles",
+                maxFilesize: 20,
+                acceptedFiles: ".zip,.rar,.7z",
+                dictDefaultMessage: "Arrastrá archivos comprimidos o hacé clic para subir",
+                previewsContainer: false,
+                createImageThumbnails: false,
+                addRemoveLinks: false,
+
+                init: function () {
+                    const dz = this;
+
+                    this.on("addedfile", async function (file) {
+                        console.log("Archivo detectado:", file.name);
+
+                        // IMPORTANTE: Detener inmediatamente el procesamiento de Dropzone
+                        dz.removeFile(file);
+
+                        try {
+                            const hash = await calcularHashArchivo(file);
+
+                            if (dropzoneHashes.includes(hash)) {
+                                Swal.fire({
+                                    title: "Archivo ya subido!",
+                                    text: "El archivo ya se encuentra en la lista!",
+                                    icon: "warning"
+                                });
+                                return;
+                            }
+
+                            file._customHash = hash;
+                            dropzoneHashes.push(hash);
+
+                            // Llamar a tu función personalizada
+                            await setPreview(file);
+
+                        } catch (error) {
+                            console.error("Error procesando archivo:", error);
+                            Swal.fire({
+                                title: "Error",
+                                text: "Error al procesar el archivo: " + error.message,
+                                icon: "error"
+                            });
+                        }
+                    });
+
+                    // Prevenir cualquier intento de upload
+                    this.on("sending", function (file, xhr, formData) {
+                        console.log("Previniendo envío automático");
+                        return false;
+                    });
+
+                    this.on("processing", function (file) {
+                        console.log("Previniendo procesamiento automático");
+                        dz.removeFile(file);
+                        return false;
+                    });
+
+                    this.on("queuecomplete", function () {
+                        console.log("Cola completada - no debería llegar aquí");
+                    });
+                }
+            });
+
+            document.getElementById("btnAddFiles").addEventListener("click", function (e) {
+                e.preventDefault();
+            });
+        });
+    </script>
+}

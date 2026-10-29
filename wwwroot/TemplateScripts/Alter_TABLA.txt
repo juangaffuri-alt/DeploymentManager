@@ -1,0 +1,11 @@
+--------ENCABEZADO DEL SCRIPT-----------------------------------
+--INCIDENTE: 
+--ANALISTA TECNICO: 
+--ANALISTA FUNCIONAL:
+--DESCRIPCION: Agrega/elimina/modifica campos a una tabla
+--OBSERVACION: 
+-----------------------------------------------------------------
+
+IF OBJECT_ID('dbo.NOMBRE_Tabla') IS NOT NULL --Si existe la tabla
+ALTER TABLE dbo.NOMBRE_Tabla -- Agrega/elimina/modifica los campos en a tabla
+-- Codigo de alter table

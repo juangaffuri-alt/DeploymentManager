@@ -1,0 +1,612 @@
+﻿@using System.Text.Encodings.Web
+@using System.Text
+@model PasadorScript.ViewModels.EnvioDlyaViewModelAndCommitsViewModel
+@section Styles {
+
+    <link rel="stylesheet" href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css" />
+    <script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <link rel="stylesheet" href="~/css/TreeHelp.css" />
+}
+@{
+    ViewData["Title"] = "Votar envios Dlya";
+}
+
+<div class="page-header">
+    <h3 class="fw-bold mb-3">Aprobar o rechazar envío Dlya</h3>
+</div>
+
+<form method="post" id="vote-form" asp-controller="EnviosDlya" asp-action="Vote">
+    <input type="hidden" asp-for="modelCambio.Usuario" />
+    <input type="hidden" asp-for="modelCambio.BranchName" />
+    <input type="hidden" asp-for="modelCambio.IdPr" />
+    <input type="hidden" asp-for="modelCambio.IdEnvioDlya" />
+    <input type="hidden" asp-for="modelCambio.RepositoryId" />
+    <input type="hidden" asp-for="modelCambio.AzureProjectType" />
+    <div class="container-fluid">
+
+        <!-- view partial -->
+        <partial name="_PullRequestInfo" model="Model.ToExtendViewModel()" />
+
+        <partial name="_TablaTareas" model='new PasadorScript.ViewModels.TablaTareasPartialModel { TareasJson = Model.modelCambio.TareasJson, Editable = false, InputName = "modelCambio.TareasJson" }' />
+
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <div class="card-title">Archivos/Envíos</div>
+
+                </div>
+                <div class="card-body">
+                    <div id="virtual-files-container" class="row gy-3 card-container" style="overflow-y:scroll; max-height:400px"></div>
+                </div>
+                <div class="card-action">
+                    <a class="btn btn-secondary" href="@ViewBag.ReturnUrl">Volver</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <input type="hidden" asp-for="Vote" id="Vote" />
+    <input type="hidden" asp-for="Comment" id="Comment" />
+</form>
+
+
+
+<!-- Template para archivos del resumen (sin orden y sin vista previa) -->
+<script type="text/template" id="template-file-summary">
+    <div class="card mb-3 file-summary-card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+                <div>
+                    <i class="file-icon me-2"></i>
+                    <strong class="file-name"></strong>
+                    <span class="badge bg-info ms-2 file-source"></span>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <small class="text-muted">Ruta original:</small><br>
+                    <span class="file-path text-truncate d-block"></span>
+                </div>
+                <div class="col-md-2">
+                    <small class="text-muted">Tamaño:</small><br>
+                    <span class="file-size"></span>
+                </div>
+                <div class="col-md-2">
+                    <small class="text-muted">Tipo:</small><br>
+                    <span class="file-type"></span>
+                </div>
+                <div class="col-md-2">
+                    <small class="text-muted">Fecha:</small><br>
+                    <span class="file-date"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</script>
+
+<script type="text/template" id="template-no-files">
+    <div class="card mb-3">
+        <div class="card-body text-center">
+            <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">No se han encontrado archivos</h5>
+            <p class="text-muted">Agregá archivos usando el botón de arriba o arrastrá archivos ZIP al área de carga.</p>
+        </div>
+    </div>
+</script>
+
+@section Scripts {
+    <script src="~/js/tabla-tareas.js" asp-append-version="true"></script>
+    <script src="/js/fileHelper.js" type="text/javascript"></script>
+    <script>
+        let virtualFiles = [];
+        let dropzoneHashes = [];
+        let zipFilesData = []; // Para almacenar datos del ZIP actual
+        let zipFilesContent = []; // Para almacenar el contenido completo de archivos ZIP
+
+
+        function existeArchivoConNombre(nombre) {
+            return virtualFiles.some(file => file.name === nombre && file._estado !== "eliminado");
+        }
+
+        // Función principal para renderizar archivos como resumen (sin orden y sin vista previa)
+        function renderVirtualFiles() {
+            const container = document.getElementById("virtual-files-container");
+            container.innerHTML = "";
+
+            if (virtualFiles.length > 0) {
+                virtualFiles.forEach((file, index) => {
+                    if (file._estado === "eliminado") return;
+
+                    const templateHtml = document.getElementById("template-file-summary").innerHTML;
+                    const wrapper = document.createElement("div");
+                    wrapper.innerHTML = templateHtml;
+                    const div = wrapper.firstElementChild;
+
+                    // Configurar elementos
+                    const fileIcon = div.querySelector(".file-icon");
+                    const fileName = div.querySelector(".file-name");
+                    const fileSource = div.querySelector(".file-source");
+                    const filePath = div.querySelector(".file-path");
+                    const fileSize = div.querySelector(".file-size");
+                    const fileType = div.querySelector(".file-type");
+                    const fileDate = div.querySelector(".file-date");
+
+                    // Llenar información
+                    fileIcon.className = `${obtenerIconoArchivo(obtenerExtension(file.name))} me-2`;
+                    fileName.textContent = file.name;
+                    filePath.textContent = file._rutaOriginal || file.name;
+                    fileSize.textContent = formatearTamaño(file._tamaño || 0);
+                    fileType.textContent = obtenerTipoArchivo(file.name);
+                    fileDate.textContent = file._fecha ? new Date(file._fecha).toLocaleDateString() : new Date().toLocaleDateString();
+
+                    // Configurar fuente
+                    if (file._origenZip) {
+                        fileSource.textContent = "ZIP";
+                        fileSource.className = "badge bg-warning ms-2 file-source";
+                    } else if (file.origin === "devops") {
+                        fileSource.textContent = "DevOps";
+                        fileSource.className = "badge bg-success ms-2 file-source";
+                    } else {
+                        fileSource.textContent = "Manual";
+                        fileSource.className = "badge bg-secondary ms-2 file-source";
+                    }
+
+                    container.appendChild(div);
+                });
+            } else {
+                const templateHtml = document.getElementById("template-no-files").innerHTML;
+                const wrapper = document.createElement("div");
+                wrapper.innerHTML = templateHtml;
+                container.appendChild(wrapper.firstElementChild);
+            }
+        }
+
+        // Función para procesar archivo comprimido
+        async function procesarArchivoComprimido(file) {
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+
+                if (file.name.toLowerCase().endsWith('.zip')) {
+                    const zip = await JSZip.loadAsync(arrayBuffer);
+                    await mostrarModalSeleccionArchivos(zip, file.name);
+                } else {
+                    Swal.fire({
+                        title: "Formato no soportado completamente",
+                        html: `<p>El archivo <strong>${file.name}</strong> es de formato ${file.name.split('.').pop().toUpperCase()}.</p>
+                                                       <p>Por el momento, solo se puede extraer automáticamente el contenido de archivos ZIP.</p>`,
+                        icon: "info",
+                        confirmButtonText: "Entendido"
+                    });
+                }
+            } catch (error) {
+                console.error('Error procesando archivo comprimido:', error);
+                Swal.fire({
+                    title: "Error",
+                    text: `No se pudo procesar el archivo ${file.name}. ${error.message}`,
+                    icon: "error"
+                });
+            }
+        }
+
+        // Función para mostrar modal de selección de archivos del ZIP
+        async function mostrarModalSeleccionArchivos(zip, nombreZip) {
+            zipFilesData = [];
+
+            // Extraer información de todos los archivos
+            for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
+                if (!zipEntry.dir) {
+                    zipFilesData.push({
+                        nombre: zipEntry.name,
+                        ruta: relativePath,
+                        tamaño: zipEntry._data ? zipEntry._data.uncompressedSize : 0,
+                        fecha: zipEntry.date || new Date(),
+                        zipEntry: zipEntry
+                    });
+                }
+            }
+
+            if (zipFilesData.length === 0) {
+                Swal.fire({
+                    title: "ZIP vacío",
+                    text: "El archivo ZIP no contiene archivos válidos.",
+                    icon: "warning"
+                });
+                return;
+            }
+
+            // Crear HTML para el modal
+            const archivosHtml = zipFilesData.map((archivo, index) => {
+                const extension = obtenerExtension(archivo.nombre);
+                const icono = obtenerIconoArchivo(extension);
+                const tamaño = formatearTamaño(archivo.tamaño);
+
+                return `
+                                            <div class="form-check mb-2 p-2 border rounded">
+                                                <input class="form-check-input zip-file-checkbox" type="checkbox" value="${index}" id="archivo_${index}" checked>
+                                                <label class="form-check-label d-flex justify-content-between align-items-center" for="archivo_${index}">
+                                                    <div>
+                                                        <i class="${icono} me-2"></i>
+                                                        <strong>${archivo.nombre}</strong>
+                                                        <br>
+                                                        <small class="text-muted">${archivo.ruta}</small>
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <small class="text-muted">${tamaño}</small>
+                                                        <br>
+                                                        <small class="text-muted">${archivo.fecha.toLocaleDateString()}</small>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        `;
+            }).join('');
+
+            // Mostrar modal
+            const modal = document.getElementById('modalZipContent');
+            const modalTitle = document.getElementById('modalZipContentLabel');
+            const filesList = document.getElementById('zip-files-list');
+
+            modalTitle.textContent = `Contenido de ${nombreZip}`;
+            filesList.innerHTML = archivosHtml;
+
+            const modalInstance = new bootstrap.Modal(modal);
+            modalInstance.show();
+        }
+
+        // Función para procesar archivos seleccionados como resumen
+        async function procesarArchivosSeleccionados(archivos, indices) {
+            const loadingSwal = Swal.fire({
+                title: 'Procesando archivos...',
+                text: 'Agregando archivos seleccionados...',
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            try {
+                for (const index of indices) {
+                    const archivo = archivos[index];
+
+                    // Verificar duplicados por nombre
+                    let nombreFinal = archivo.nombre;
+                    let contador = 1;
+                    while (existeArchivoConNombre(nombreFinal)) {
+                        const extension = obtenerExtension(archivo.nombre);
+                        const nombreSinExt = archivo.nombre.substring(0, archivo.nombre.lastIndexOf('.'));
+                        nombreFinal = `${nombreSinExt}_${contador}.${extension}`;
+                        contador++;
+                    }
+
+                    // Extraer el contenido completo del archivo
+                    let contenidoCompleto = '';
+                    let esBinario = false;
+                    try {
+                        contenidoCompleto = await archivo.zipEntry.async("text");
+                    } catch (e) {
+                        // Es un archivo binario
+                        const arrayBuffer = await archivo.zipEntry.async("arraybuffer");
+                        contenidoCompleto = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+                        esBinario = true;
+                    }
+
+                    const hash = await calcularHashDesdeContenido(contenidoCompleto);
+
+                    if (!dropzoneHashes.includes(hash)) {
+                        dropzoneHashes.push(hash);
+
+                        // Agregar a virtualFiles para mostrar en la UI
+                        virtualFiles.push({
+                            name: nombreFinal,
+                            content: contenidoCompleto, // No guardamos contenido en virtualFiles para la UI
+                            _estado: "nuevo",
+                            _hash: hash,
+                            _origenZip: true,
+                            _rutaOriginal: archivo.ruta,
+                            _tamaño: archivo.tamaño,
+                            _fecha: archivo.fecha.toISOString()
+                        });
+
+                        // Agregar a zipFilesContent para almacenar el contenido real
+                        zipFilesContent.push({
+                            name: nombreFinal,
+                            content: contenidoCompleto,
+                            rutaOriginal: archivo.ruta,
+                            tamaño: archivo.tamaño,
+                            esBinario: esBinario,
+                            fecha: archivo.fecha.toISOString()
+                        });
+                    }
+                }
+
+                Swal.close();
+                renderVirtualFiles();
+
+                Swal.fire({
+                    title: "¡Archivos agregados!",
+                    text: `Se han seleccionado ${indices.length} archivo(s) desde el ZIP.`,
+                    icon: "success",
+                    timer: 2000
+                });
+
+            } catch (error) {
+                Swal.close();
+                console.error('Error procesando archivos:', error);
+                Swal.fire({
+                    title: "Error",
+                    text: `Error al procesar archivos: ${error.message}`,
+                    icon: "error"
+                });
+            }
+        }
+
+        // Función para generar ZIP con los archivos seleccionados
+        async function generarZipConArchivos() {
+            if (zipFilesContent.length === 0) {
+                return null;
+            }
+
+            try {
+                const zip = new JSZip();
+
+                // Agregar cada archivo al ZIP
+                for (const archivo of zipFilesContent) {
+                    if (archivo.esBinario) {
+                        // Convertir de base64 a binary
+                        const binaryString = atob(archivo.content);
+                        const bytes = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {
+                            bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        zip.file(archivo.rutaOriginal, bytes);
+                    } else {
+                        zip.file(archivo.rutaOriginal, archivo.content);
+                    }
+                }
+
+                // Generar el ZIP como base64
+                const zipBase64 = await zip.generateAsync({
+                    type: "base64",
+                    compression: "DEFLATE",
+                    compressionOptions: {
+                        level: 6
+                    }
+                });
+
+                return {
+                    base64: zipBase64,
+                    archivos: zipFilesContent.map(f => ({
+                        nombre: f.name,
+                        rutaOriginal: f.rutaOriginal,
+                        tamaño: f.tamaño,
+                        esBinario: f.esBinario,
+                        fecha: f.fecha
+                    })),
+                    totalArchivos: zipFilesContent.length,
+                    fechaGeneracion: new Date().toISOString()
+                };
+
+            } catch (error) {
+                console.error('Error generando ZIP:', error);
+                throw error;
+            }
+        }
+
+
+        // Funciones de utilidad
+        function obtenerExtension(nombreArchivo) {
+            return nombreArchivo.split('.').pop().toLowerCase();
+        }
+
+        function obtenerIconoArchivo(extension) {
+            const iconos = {
+                'txt': 'fas fa-file-alt text-primary',
+                'sql': 'fas fa-database text-info',
+                'js': 'fab fa-js-square text-warning',
+                'css': 'fab fa-css3-alt text-primary',
+                'html': 'fab fa-html5 text-danger',
+                'json': 'fas fa-file-code text-success',
+                'xml': 'fas fa-file-code text-info',
+                'class': 'fas fa-file-code text-info',
+                'jar': 'fas fa-file-code text-info',
+                // 'pdf': 'fas fa-file-pdf text-danger',
+                // 'doc': 'fas fa-file-word text-primary',
+                // 'docx': 'fas fa-file-word text-primary',
+                // 'xls': 'fas fa-file-excel text-success',
+                // 'xlsx': 'fas fa-file-excel text-success',
+                'png': 'fas fa-file-image text-info',
+                'jpg': 'fas fa-file-image text-info',
+                'jpeg': 'fas fa-file-image text-info',
+                'gif': 'fas fa-file-image text-info',
+                'zip': 'fas fa-file-archive text-warning',
+                'rar': 'fas fa-file-archive text-warning',
+                '7z': 'fas fa-file-archive text-warning'
+            };
+            return iconos[extension] || 'fas fa-file text-secondary';
+        }
+
+        function obtenerTipoArchivo(nombreArchivo) {
+            const extension = obtenerExtension(nombreArchivo);
+            const tipos = {
+                'txt': 'Texto plano',
+                'sql': 'SQL Script',
+                'js': 'JavaScript',
+                'css': 'Hoja de estilo',
+                'html': 'HTML',
+                'json': 'JSON',
+                'xml': 'XML',
+                'pdf': 'PDF',
+                'doc': 'Word',
+                'docx': 'Word',
+                'xls': 'Excel',
+                'xlsx': 'Excel',
+                'png': 'Imagen PNG',
+                'jpg': 'Imagen JPG',
+                'jpeg': 'Imagen JPEG',
+                'gif': 'Imagen GIF',
+                'zip': 'Archivo ZIP',
+                'rar': 'Archivo RAR',
+                '7z': 'Archivo 7Z'
+            };
+            return tipos[extension] || 'Archivo';
+        }
+
+        function formatearTamaño(bytes) {
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            if (bytes === 0) return '0 B';
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/[&<>"']/g, function (m) {
+                return {
+                    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+                }[m];
+            });
+        }
+
+        // Funciones globales para el modal
+        window.seleccionarTodos = function (seleccionar) {
+            const checkboxes = document.querySelectorAll('.zip-file-checkbox');
+            checkboxes.forEach(cb => cb.checked = seleccionar);
+        };
+
+        // Función de hash
+        async function calcularHashArchivo(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = async function () {
+                    const buffer = reader.result;
+                    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+                    const hashArray = Array.from(new Uint8Array(hashBuffer));
+                    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                    resolve(hashHex);
+                };
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        async function calcularHashDesdeContenido(texto) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(texto);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            return hashHex;
+        }
+
+        // Función para procesar archivos dropzone
+        async function setPreview(file) {
+            const fileExtension = obtenerExtension(file.name);
+
+            if (['zip', 'rar', '7z'].includes(fileExtension)) {
+                await procesarArchivoComprimido(file);
+            } else {
+                const content = await file.text();
+                virtualFiles.push({
+                    name: file.name,
+                    content: content,  // No guardamos contenido en la UI
+                    _estado: "nuevo",
+                    _hash: file._customHash,
+                    _tamaño: file.size,
+                    _fecha: new Date().toISOString()
+                });
+
+                // Agregar a zipFilesContent para archivos individuales también
+                zipFilesContent.push({
+                    name: file.name,
+                    content: content,
+                    rutaOriginal: file.name,
+                    tamaño: file.size,
+                    esBinario: false,
+                    fecha: new Date().toISOString()
+                });
+            }
+
+            renderVirtualFiles();
+        }
+
+        // Inicialización
+        document.addEventListener("DOMContentLoaded", async (e) => {
+
+
+            // Inicializar Dropzone
+            Dropzone.autoDiscover = false;
+
+            // Cargar archivos existentes del modelo
+        @foreach (var file in Model.commits)
+        {
+                var content = file.Content;
+                var encodedContent = JavaScriptEncoder.Default.Encode(content ?? "");
+                <text>
+                                var contenido = `@Html.Raw(encodedContent)`;
+                    var nombre = "@file.Name";
+                    //var encodContent = "@content";
+                    var hash = await calcularHashDesdeContenido(contenido);
+                    virtualFiles.push({
+                        displayName: "@file.DisplyaName",
+                        name: nombre,
+                        content: contenido,
+                        rutaOriginal: "@file.RutaOriginal",
+                        origin: "devops",
+                        _hash: hash,
+                        _tamaño: contenido.length,
+                        _fecha: new Date("@file._Fecha.ToString("yyyy-MM-ddTHH:mm:ss")").toISOString(),
+                        _esBinario: false
+                    });
+
+                    dropzoneHashes.push(hash);
+                </text>
+        }
+
+                renderVirtualFiles();
+
+        });
+        //commit
+        $(document).ready(function () {
+            // Aprobar directamente (sin comentario)
+            $(".btn-approve").click(function (e) {
+                e.preventDefault();
+                $("#Vote").val($(this).data("vote"));
+                $("#Comment").val(""); // sin motivo
+                $("#vote-form").submit();
+            });
+
+            // Aprobar con sugerencias o Rechazar (requieren comentario)
+            $(".btn-approve-with-suggestions, .btn-reject").click(function (e) {
+                e.preventDefault();
+
+                const vote = $(this).data("vote");
+                const actionText = vote == 5 ? "Aprobar con sugerencias" : "Rechazar";
+
+                Swal.fire({
+                    title: actionText,
+                    input: 'text',
+                    inputPlaceholder: 'Ingrese un motivo',
+                    showCancelButton: true,
+                    confirmButtonText: 'Confirmar',
+                    cancelButtonText: 'Cancelar',
+                    customClass: {
+                        confirmButton: 'btn btn-success',
+                        cancelButton: 'btn btn-danger'
+                    },
+                    buttonsStyling: false
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        const userComment = result.value?.trim();
+                        if (!userComment) {
+                            Swal.fire('El motivo es obligatorio.', '', 'warning');
+                            return;
+                        }
+                        $("#Vote").val(vote);
+                        $("#Comment").val(userComment);
+                        $("#vote-form").submit();
+                    }
+                });
+            });
+        });
+    </script>
+}

@@ -1,0 +1,3 @@
+﻿Scaffold-DbContext "Server=TCBPN002;Initial Catalog=nuevoP229; User Id=usrNuevoP229; Password=bpnSA@1234;TrustServerCertificate=True; Encrypt=false" Microsoft.EntityFrameworkCore.SqlServer -OutputDir DbModels -NoOnConfiguring -Context NuevoP229Context
+
+dotnet ef dbcontext scaffold "Server=TCBPN002;Initial Catalog=nuevoP229; User Id=usrNuevoP229; Password=bpnSA@1234;TrustServerCertificate=True; Encrypt=false" Microsoft.EntityFrameworkCore.SqlServer --output-dir DbModels --no-onconfiguring --context NuevoP229Context -f --no-build

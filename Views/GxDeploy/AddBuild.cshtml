@@ -1,0 +1,496 @@
+﻿@model PasadorScript.ViewModels.BuildGXViewModel
+@inject PasadorScript.Services.AdGroups.IAdGroupService _adGroups
+@inject PasadorScript.Services.TeamDev.IServiciosTeamDev _serviciosTeamDev
+@{
+    var usr = await _adGroups.GetInfoUser();
+}
+@section Styles {
+    <link rel="stylesheet" href="~/assets/css/IconosGx.css" />
+}
+
+<div class="page-header">
+    <h3 class="fw-bold mb-3">Nuevo Build GX</h3>
+</div>
+
+<!--   Big container   -->
+<form method="post" id="formCambio">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-3">
+                                <div class="form-group">
+                                    <label class="form-label" asp-for="IdTipoCambio"></label>
+                                    <div class="selectgroup w-100">
+                                        @{
+                                            var selectList = ViewBag.TiposCambios as SelectList;
+                                        }
+                                        @foreach (var item in selectList!)
+                                        {
+                                            <label class="selectgroup-item">
+                                                <input type="radio"
+                                                       value="@item.Value"
+                                                       class="selectgroup-input" asp-for="IdTipoCambio" />
+
+                                                <span class="selectgroup-button" for="tipo_@item.Value">@item.Text</span>
+                                            </label>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-2">
+                                <div class="form-group">
+                                    <label asp-for="NroIncidente" class="form-label"></label>
+                                    <input asp-for="NroIncidente" class="form-control form-control" />
+                                    <span asp-validation-for="NroIncidente" class="text-danger"></span>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="form-group">
+                                    <label class="form-label">Hotfix</label>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" asp-for="IsHotfix" id="isHotfix" />
+                                        <label class="form-check-label" for="isHotfix" title="Al ser true, el rol de Implementación y control podrá sobreescribir el de QA y que el pasaje siga su curso. Caso contrario, se requiere la aprobación de QA">Eventual excepción de QA</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="form-group">
+                                    @{
+                                        // Recuperás y casteás
+                                        var repos = (IEnumerable<PasadorScript.DTO.AzureDev.RepoSetting>)ViewBag.ReposBt;
+                                    }
+                                    <label asp-for="BtRepo" class="form-label"></label>
+                                    <select asp-for="BtRepo" class="form-select">
+                                        @foreach (var r in repos)
+                                        {
+                                            <option value="@r.RepoName" data-param="@r.Param">
+                                                @r.DisplayName
+                                            </option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="form-group">
+                                    <label asp-for="Descripcion" class="form-label"></label>
+                                    <input type="text" asp-for=Descripcion class="form-control form-control" id="descripcion" />
+                                    <span asp-validation-for="Descripcion" class="text-danger"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <partial name="_TablaTareas" model='new PasadorScript.ViewModels.TablaTareasPartialModel { TareasJson = Model.TareasJson, Editable = true, InputName = "TareasJson" }' />
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <div class="card-title">Commits desde GX-Server</div>
+
+                                    </div>
+                                    <div class="card-body">
+                                        <h3>Filtros</h3>
+                                        <div class="row">
+                                            <div class="col-3">
+                                                <div class="form-group">
+                                                    <label class="form-label">CommitId #</label>
+                                                    <input id="inputCommitId" type="text" class="form-control form-control" placeholder="Ej. 1100" />
+                                                </div>
+                                            </div>
+                                            <div class="col-3">
+                                                <div class="form-group">
+                                                    <label class="form-label">Usuario</label>
+                                                    <input id="inputUsuario" type="text" class="form-control form-control" placeholder="Ej. @usr.Username" value="@usr.Username" />
+                                                </div>
+                                            </div>
+                                            <div class="col-3">
+                                                <div class="form-group">
+                                                    <label class="form-label">Comentario</label>
+                                                    <input id="inputComentario" type="text" class="form-control form-control" placeholder="Ej. GDEM xxx" />
+                                                </div>
+                                            </div>
+                                            <div class="col-3 d-flex align-items-end">
+                                                <div class="form-group w-100">
+                                                    <button class="btn btn-primary w-100" id="btnBuscar">
+                                                        <span class="btn-label">
+                                                            <i class="fas fa-search"></i>
+                                                        </span>
+                                                        Buscar commits
+                                                    </button>
+
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+
+                                            <div class="col-12">
+                                                <div id="spinner-bar-container" class="spinner-bar-container" style="display:none">
+                                                    <div class="spinner-bar"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div id="resultado" class="mt-4"></div>
+                                        <table class="table table-hover mt-4" id="tablaResultados">
+                                            <thead>
+                                                <tr>
+                                                    <th scope="col"></th>
+                                                    <th scope="col">#</th>
+                                                    <th scope="col">Liberado</th>
+                                                    <th scope="col">Usuario</th>
+                                                    <th scope="col">Fecha</th>
+                                                    <th scope="col">Comentarios</th>
+                                                    <th scope="col"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="tablaBody">
+                                                <tr id="filaVacia">
+                                                    <td colspan="5" class="text-center text-muted">No se han encontrado registros.</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-action">
+                        <div class="btn-group dropdown">
+                            <button class="btn btn-primary dropdown-toggle"
+                                    type="button"
+                                    data-bs-toggle="dropdown">
+                                Guardar
+                            </button>
+                            <ul class="dropdown-menu" role="menu">
+                                <li>
+                                    <button class="dropdown-item btn-approve" data-action="/GxDeploy/guardar">
+                                        <i class="bi bi-save me-1"></i>Guardar
+                                    </button>
+                                    <button class="dropdown-item btn-approve-and-release" data-action="/GxDeploy/guardarYLiberar">
+                                        <i class="bi bi-share me-1"></i>Guardar y liberar
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <a class="btn btn-secondary" href="@ViewBag.ReturnUrl">Volver</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+<div class="modal fade" id="modalDetalle" tabindex="-1" aria-labelledby="modalDetalleLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalDetalleLabel">Detalles del Commit</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th>
+                            <th>Nombre del Objeto</th>
+                            <th>Descripción</th>
+                            <th style="white-space: nowrap;">Tipo de Objeto</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaDetalleModal">
+                        <!-- Aquí se llenan los detalles dinámicamente -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+@section Scripts {
+    <partial name="_TablaTareasScripts" />
+    <script>
+
+        let commitsOriginales = []; // aquí se guarda la colección completa
+
+        document.getElementById("btnBuscar").addEventListener("click", async function (e) {
+            e.preventDefault(); // ✅ Agregar esto
+            const commitId = document.getElementById("inputCommitId").value.trim();
+            const sel = document.getElementById('BtRepo');
+            const option = sel.options[sel.selectedIndex];
+            const paramKb = option.dataset.param;  // "KB_Consolidada"
+            const usuario = document.getElementById("inputUsuario").value.trim();
+            const comentario = document.getElementById("inputComentario").value.trim();
+
+            //const spinner = document.getElementById("spinner");
+            const spinner = document.getElementById("spinner-bar-container");
+            const tablaBody = document.getElementById("tablaBody");
+
+            spinner.style.display = "block";
+            tablaBody.innerHTML = "";
+
+            const params = new URLSearchParams();
+            if (paramKb) params.append("KbName", paramKb);
+            if (commitId) params.append("revisionId", commitId);
+            if (usuario) params.append("searchQuery", usuario);
+            if (comentario) params.append("searchQuery", comentario); // Podés combinar o separar como gustes
+
+            // Si querés pasar la KbName o ServerKbVersion
+            //params.append("kbName", "TuKB");
+            //params.append("serverKbVersion", "1.0");
+
+            try {
+                const response = await fetch(`/teamDev/GetCommitsFromServer?${params.toString()}`);
+
+                if (!response.ok) throw new Error("Error al consultar los commits");
+
+                const data = await response.json();
+                commitsOriginales = data; //actualizo actuales
+                var builds = "<span class='badge badge-count'>No builds</span>";
+                if (Array.isArray(data) && data.length > 0) {
+                    data.forEach((item, index) => {
+                        const tr = document.createElement("tr");
+
+                        // Escapar el JSON para HTML
+                        const actionsJson = JSON.stringify(item.actions)
+                            .replace(/'/g, "&#39;")
+                            .replace(/"/g, "&quot;");
+
+                        if (item.builds && item.builds.length > 0) {
+                            const ids = item.builds.map(x => x.idBuildGx).join(", ");
+                            builds = `<span class='badge badge-primary' title='Presente en los builds ${ids}'>Builds</span>`
+                        }
+
+                        tr.innerHTML = `
+                                                    <td>
+                                                        <input type="checkbox" class="form-check-input chk-commit"
+                                                               data-id="${item.revision}" />
+                                                    </td>
+                                                    <td>${item.revision ?? '-'}</td>
+                                                    <td>${builds}</td>
+                                                    <td>${item.author ?? '-'}</td>
+                                                    <td>${new Date(item.date).toLocaleString()}</td>
+                                                    <td>${item.message ?? ''}</td>
+                                                    <td>
+                                                                <button type="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#modalDetalle" data-actions='${actionsJson}'>
+                                                            Ver detalles
+                                                        </button>
+                                                    </td>
+                                                `;
+                        tablaBody.appendChild(tr);
+                    });
+                } else {
+                    tablaBody.innerHTML = `
+                                                <tr>
+                                                    <td colspan="5" class="text-center text-muted">No se han encontrado registros.</td>
+                                                </tr>
+                                            `;
+                }
+            } catch (error) {
+                tablaBody.innerHTML = `
+                                            <tr>
+                                                <td colspan="5" class="text-center text-danger">Error: ${error.message}</td>
+                                            </tr>
+                                        `;
+            } finally {
+                spinner.style.display = "none";
+            }
+        });
+        //modal
+        // Escuchamos la apertura del modal
+        const modalDetalle = document.getElementById('modalDetalle');
+
+        function safeJsonParse(jsonString) {
+            try {
+                return JSON.parse(jsonString);
+            } catch (error) {
+                console.error('Error en JSON parse:', error.message);
+                console.log('Longitud del JSON:', jsonString.length);
+
+                // Buscar donde se corta - buscar la última llave o comilla
+                const lastBrace = jsonString.lastIndexOf('}');
+                const lastBracket = jsonString.lastIndexOf(']');
+
+                console.log('Última llave en posición:', lastBrace);
+                console.log('Último corchete en posición:', lastBracket);
+
+                // Intentar reparar cortando donde debería terminar
+                if (lastBrace > -1 && lastBracket === -1) {
+                    // Falta el corchete final
+                    const fixed = jsonString.substring(0, lastBrace + 1) + ']';
+                    console.log('JSON reparado:', fixed);
+                    return JSON.parse(fixed);
+                }
+
+                throw error;
+            }
+        }
+
+        modalDetalle.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const actionsJson = button.getAttribute('data-actions');
+            const actions = safeJsonParse(actionsJson);
+            //const actions = JSON.parse(actionsJson);
+            const tbody = document.getElementById('tablaDetalleModal');
+            tbody.innerHTML = "";
+
+            if (actions.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-muted text-center">Sin acciones.</td></tr>`;
+                return;
+            }
+
+            const iconClassMap = {
+                "Procedure": "bg-ObjectProcedure",
+                "Transaction": "bg-ObjectTransaction",
+                "Table": "bg-ObjectTable",
+                "Web Panel": "bg-ObjectWebpanel",
+                "SDPanel": "bg-ObjectSDPanel",
+                "DataProvider": "bg-ObjectDataProvider",
+                "WorkWithSD": "bg-ObjectWorkWithSD",
+                "Menu": "bg-ObjectMenu",
+                "Dashboard": "bg-ObjectDashboard",
+                "Attribute": "bg-ObjectAttribute"
+                // agregá más si es necesario
+            };
+
+            const statusClassMap = {
+                "Modified": "badge badge-info",
+                "Inserted": "badge badge-success",
+                "Deleted": "badge badge-danger"
+            }
+
+            actions.forEach(action => {
+                const tr = document.createElement("tr");
+                var objectType = action.objectType;
+                var cssClass = iconClassMap[objectType] || "bg-ObjectUnknown"; // default si no se encuentra
+                var icon = `<span class="icon32 ${cssClass}"></span>`;
+                var badge = statusClassMap[action.type];
+                tr.innerHTML = `
+                                            <td><span class='${badge}'>${action.type}</span></td>
+                                            <td>${action.objectName}</td>
+                                            <td>${action.objectDescription}</td>
+                                            <td>${icon}${action.objectType}</td>
+                                        `;
+                tbody.appendChild(tr);
+            });
+        });
+        //commit
+        // Escuchar los dos botones que comparten lógica de envío
+        document.querySelectorAll('.btn-approve, .btn-approve-and-release').forEach(button => {
+            button.addEventListener('click', async function (e) {
+                e.preventDefault(); // ✅ Agregar esto
+                const form = document.getElementById("formCambio"); 
+                if (typeof window.serializeTablaTareas === 'function' && window.serializeTablaTareas() === false) {
+                    return;
+                }
+                const formData = new FormData(form);
+
+                // Armar el modelo con los datos del formulario
+                const modelCambio = {};
+                formData.forEach((value, key) => {
+                // Asignar todos los valores primero
+                    modelCambio[key] = value;
+                });
+
+                // Luego sobrescribir los checkboxes con su estado booleano
+                form.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                    modelCambio[checkbox.name] = checkbox.checked;
+                });
+
+                // Obtener commits seleccionados
+                const commitsSeleccionados = [];
+                document.querySelectorAll(".chk-commit:checked").forEach(chk => {
+                    const revision = parseInt(chk.dataset.id);
+                    const commit = commitsOriginales.find(c => c.revision === revision);
+                    if (commit) commitsSeleccionados.push(commit);
+                });
+
+                // Componer el payload
+                const payload = {
+                    modelCambio: modelCambio,
+                    commits: commitsSeleccionados
+                };
+
+                // Leer la URL de acción desde el botón presionado
+                const actionUrl = this.dataset.action;
+
+                try {
+
+                    if (commitsSeleccionados.length <= 0) {
+                        Swal.fire({
+                            title: "Error de validación",
+                            text: "Por favor, selecciona al menos un commit",
+                            icon: "warning"
+                        });
+                        return;
+                    }
+
+                    // Mostrar loading
+                    Swal.fire({
+                        title: 'Procesando...',
+                        text: 'Guardando build, por favor espera',
+                        allowOutsideClick: false,
+                        showConfirmButton: false,
+                        willOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    const response = await fetch(actionUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+
+                    if (!result.success) {
+                        // Si vino con errores de validación del modelo
+                        if (result.errors) {
+                            const mensajes = Object.entries(result.errors)
+                                .map(([campo, valor]) => {
+                                    const label = valor.label || campo;
+                                    const msj = Array.isArray(valor.errores) ? valor.errores.join(', ') : '';
+                                    return `• <b>${label}</b>: ${msj}`;
+                                })
+                                .join('<br>');
+
+
+                            Swal.fire({
+                                title: "Errores de validación",
+                                html: mensajes,
+                                icon: "warning"
+                            });
+                        } else {
+                            // Otro tipo de error
+                            Swal.fire({
+                                title: "Errores de validación",
+                                text: result.message,
+                                icon: "warning"
+                            });
+
+                        }
+
+                        return;
+                    }
+
+                    if (result.success) {
+                        window.location.href = result.redirectUrl;
+                    }
+
+                } catch (err) {
+                    console.error(err);
+
+                    Swal.fire({
+                        title: "Error",
+                        text: "Error al enviar solicitud.",
+                        icon: "warning"
+                    });
+                }
+            });
+        });
+    </script>
+}

@@ -1,0 +1,79 @@
+﻿@using System.Text.Encodings.Web
+@model PasadorScript.DTO.Auditoria.ApprovalAuditInfo
+
+<div class="card mb-2 audit-approval is-@Model.StatusTone">
+    <div class="card-body py-2">
+        <div class="row align-items-center">
+            <div class="col-md-4">
+                @if (!string.IsNullOrWhiteSpace(Model.ApprovalFor?.DisplayName))
+                {
+                    var forUrl = UrlEncoder.Default.Encode(Model.ApprovalFor.ImageUrl ?? "");
+                    var forImg = $"/api/Handler/imagen-devops?url={forUrl}";
+
+                    <div class="d-flex align-items-center gap-2">
+                        <img src="@forImg"
+                             alt="@Model.ApprovalFor.DisplayName"
+                             width="32"
+                             height="32"
+                             class="rounded-circle" />
+                        <div>
+                            <div class="fw-bold small">@Model.ApprovalFor.DisplayName</div>
+                            <small class="text-muted">Aprobador requerido</small>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="col-md-4">
+                @if (Model.TieneAprobadorHumano)
+                {
+                    var byUrl = UrlEncoder.Default.Encode(Model.ApprovedBy.ImageUrl ?? "");
+                    var byImg = $"/api/Handler/imagen-devops?url={byUrl}";
+
+                    <div class="d-flex align-items-center gap-2">
+                        <img src="@byImg"
+                             alt="@Model.ApprovedBy.DisplayName"
+                             width="32"
+                             height="32"
+                             class="rounded-circle" />
+                        <div>
+                            <div class="fw-bold small">@Model.ApprovedBy.DisplayName</div>
+                            <small class="text-muted">Quién aprobó</small>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <small class="text-muted">@Model.FirmanteVacioLabel</small>
+                }
+            </div>
+
+            <div class="col-md-4 text-end">
+                <div>
+                    <span class="@Model.StatusBadgeClass">
+                        <i class="fas @Model.StatusIcon me-1"></i>
+                        @Model.StatusLabel
+                    </span>
+                    @if (Model.IsAutomated)
+                    {
+                        <span class="badge badge-info ms-1">
+                            <i class="fas fa-robot me-1"></i>
+                            Automática
+                        </span>
+                    }
+                </div>
+                @if (Model.ModifiedOnArgentina.HasValue)
+                {
+                    <small class="text-muted d-block mt-1">
+                        @Model.ModifiedOnArgentina.Value.ToString("dd/MM/yyyy HH:mm")
+                    </small>
+                }
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(Model.Comments))
+        {
+            <blockquote class="audit-evidence mb-0 mt-2">@Model.Comments</blockquote>
+        }
+    </div>
+</div>

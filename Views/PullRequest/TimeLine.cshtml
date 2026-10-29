@@ -1,0 +1,211 @@
+﻿@using PasadorScript.Extensions
+@model PasadorScript.ViewModels.PasajeConPullRequest
+@inject PasadorScript.Services.Azure.IAzureService _serviciosAzure
+
+@section Styles {
+    <style>
+        ul.timeline-3 {
+            list-style-type: none;
+            position: relative;
+        }
+
+            ul.timeline-3:before {
+                content: " ";
+                background: #d4d9df;
+                display: inline-block;
+                position: absolute;
+                left: 29px;
+                width: 2px;
+                height: 100%;
+                z-index: 400;
+            }
+
+            ul.timeline-3> li {
+                margin: 20px 0;
+                padding-left: 20px;
+            }
+
+                ul.timeline-3> li:before {
+                    content: " ";
+                    background: white;
+                    display: inline-block;
+                    position: absolute;
+                    border-radius: 50%;
+                    border: 3px solid #22c0e8;
+                    left: 20px;
+                    width: 20px;
+                    height: 20px;
+                    z-index: 400;
+                }
+    </style>
+}
+
+<div class="page-header">
+    <h3 class="fw-bold mb-3">Línea de eventos en @Html.Raw(Model.EsGx ? "Build GX" : "Script") ID#@Model.IdScript</h3>
+</div>
+<div class="container my-5">
+    <div class="row">
+        <div class="col-md-6 offset-md-3">
+            <div class="card">
+                <div class="card-header">
+                    <span class="badge badge-success float-end">@Model.DescripcionTipoPasaje @Model.NumeroIncidente</span>
+                    <h5>
+                        @Model.DescripcionScript
+                    </h5>
+                </div>
+                @{
+                    PasadorScript.DTO.AzureDev.PullRequestHistory history;
+                }
+                <div class="card-body">
+                    @if (Model.PullRequestId.HasValue)
+                    {
+                        _serviciosAzure.ForceProyectType(Model.AzureProjectType.ToAzureProjectType());
+                        history = await _serviciosAzure.GetPullRequestHistoryAsync(Model.RepositoryId, Model.PullRequestId.Value);
+
+                        <div class="container mt-4">
+                            <div class="text-end">
+                                <h4 class="mb-3"><i class="fas fa-rocket"></i> Estado en PR: <span class="badge bg-success">@history.StatusLabel</span></h4>
+                            </div>
+                            <h4 class="mb-3"><i class="fas fa-users"></i> Reviewers actuales</h4>
+                            <ul class="timeline-3">
+                                @foreach (var h in history.Reviewers)
+                                {
+                                    <li class="mb-3">
+
+                                        <div>
+                                            <div class="avatar avatar-xs">
+                                                <img src="@h.UrlImage" alt="@h.Name" class="avatar-img rounded-circle">
+                                            </div>
+                                            <span class="text-muted ms-2">@h.Name</span>
+                                            <div class="text-end">
+                                                <span class="@h.BadgeClass">@h.VoteLabel</span>
+                                            </div>
+                                        </div>
+                                    </li>
+                                }
+                            </ul>
+
+                            <h4 class="mb-3 mt-5"><i class="fas fa-history"></i> Historial de votos</h4>
+                            <ul class="timeline-3">
+                                @foreach (var vote in history.VoteHistory.OrderByDescending(v => v.Timestamp))
+                                {
+                                    if (vote.IsVote || (!String.IsNullOrEmpty(vote.Content) && vote.Content.Trim() != ""))
+                                    {
+                                        <li class="mb-3">
+
+                                            <div>
+                                                @if (vote.IsVote)
+                                                {
+                                                    <i class="@vote.IconType"></i>
+                                                    <span class="@vote.BadgeClass">@vote.VoteLabel</span>
+                                                }
+                                                else if (!String.IsNullOrEmpty(vote.Content) && vote.Content.Trim() != "")
+                                                {
+                                                    <i class="@vote.IconType"></i>
+                                                    <span>@vote.Content</span>
+                                                }
+                                                <span class="badge badge-count float-end">
+                                                    <i class="fas fa-calendar-alt"></i> @vote.Timestamp.ToString("dd/MM/yyyy HH:mm:ss")
+                                                </span>
+                                            </div>
+                                            <p class="mb-0">@vote.User</p>
+                                        </li>
+                                    }
+                                }
+                            </ul>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="container mt-4">
+                            <div class="text-end">
+                                <h4 class="mb-3"><i class="fas fa-rocket"></i> Estado en PR: <span class="badge bg-danger">NO INICIADO</span></h4>
+                            </div>
+                        </div>
+                    }
+
+
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- HISTORICOS -->
+    @if (Model.PullRequestHistoricos.Any())
+    {
+        foreach (var pr in Model.PullRequestHistoricos)
+        {
+            PasadorScript.DTO.AzureDev.PullRequestHistory prH;
+            _serviciosAzure.ForceProyectType(Model.AzureProjectType.ToAzureProjectType());
+            prH = await _serviciosAzure.GetPullRequestHistoryAsync(Model.RepositoryId, pr.IdPr);
+            <div class="row">
+                <div class="col-md-6 offset-md-3">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>
+                                Id PullRequest # @pr.IdPr
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="container mt-4">
+                                <div class="text-end">
+                                    <h4 class="mb-3"><i class="fas fa-rocket"></i> Estado: <span class="badge bg-success">@prH.StatusLabel</span></h4>
+                                </div>
+
+                                <h4 class="mb-3 mt-5"><i class="fas fa-history"></i> Historial de votos</h4>
+                                <ul class="timeline-3">
+                                    @foreach (var vote in prH.VoteHistory.OrderByDescending(v => v.Timestamp))
+                                    {
+                                        if (vote.IsVote || (!String.IsNullOrEmpty(vote.Content) && vote.Content.Trim() != ""))
+                                        {
+                                            <li class="mb-3">
+
+                                                <div>
+                                                    @if (vote.IsVote)
+                                                    {
+                                                        <i class="@vote.IconType"></i>
+                                                        <span class="@vote.BadgeClass">@vote.VoteLabel</span>
+                                                    }
+                                                    else if (!String.IsNullOrEmpty(vote.Content) && vote.Content.Trim() != "")
+                                                    {
+                                                        <i class="@vote.IconType"></i>
+                                                        <span>@vote.Content</span>
+                                                    }
+                                                    <span class="badge badge-count float-end">
+                                                        <i class="fas fa-calendar-alt"></i> @vote.Timestamp.ToString("dd/MM/yyyy HH:mm:ss")
+                                                    </span>
+                                                </div>
+                                                <p class="mb-0">@vote.User</p>
+                                            </li>
+                                        }
+                                    }
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+
+    <!--<div class="row">
+        <div id="editor" style="height: 100px; width: 100%;"></div>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/ace.js"></script>
+        <script>
+            var editor = ace.edit("editor");
+            editor.session.setMode("ace/mode/sql");
+            editor.setTheme("ace/theme/textmate");
+            editor.setOptions({
+                maxLines: 3,
+                minLines: 1,
+                fontSize: "14px"
+            });
+        </script>
+    </div>-->
+
+    <div class="row">
+        <div class="col-md-6 offset-md-3 text-center">
+            <a class="btn btn-secondary" href="@ViewBag.ReturnUrl">Volver</a>
+        </div>
+    </div>
+</div>

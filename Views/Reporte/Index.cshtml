@@ -1,0 +1,226 @@
+﻿@model List<PasadorScript.ViewModels.RolPermisosViewModel>
+
+
+@{
+    ViewBag.Title = "Reporte de Permisos por Rol";
+}
+
+<style>
+    /* Estilos pastel y redondeados */
+    .pastel-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    }
+
+    .rol-card {
+        background-color: #ffffff;
+        border-radius: 28px;
+        margin-bottom: 24px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
+        transition: all 0.25s ease;
+        border: 1px solid #f0eef3;
+        overflow: hidden;
+    }
+
+    .rol-header {
+        background: linear-gradient(135deg, #f9f7fd 0%, #f3f0f9 100%);
+        padding: 18px 24px;
+        border-radius: 28px 28px 0 0;
+        cursor: pointer;
+        transition: background 0.2s;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .rol-header:hover {
+        background: linear-gradient(135deg, #f0ecf9 0%, #e8e3f5 100%);
+    }
+
+    .rol-titulo {
+        font-weight: 600;
+        font-size: 1.25rem;
+        color: #4a3b6e;
+    }
+
+    .rol-descripcion {
+        font-size: 0.9rem;
+        color: #6b5b8c;
+        margin-top: 4px;
+    }
+
+    .rol-email {
+        background-color: #e9e3f5;
+        padding: 4px 12px;
+        border-radius: 50px;
+        font-size: 0.75rem;
+        color: #5a4a7a;
+    }
+
+    .rol-icono {
+        font-size: 1.5rem;
+        color: #8f7bb3;
+        transition: transform 0.2s;
+    }
+
+    .rol-body {
+        padding: 0 24px 24px 24px;
+        background-color: #fefefe;
+        border-top: 1px solid #f2eef9;
+        display: none; /* oculto por defecto */
+    }
+
+    .rol-body.visible {
+        display: block;
+        animation: fadeSlide 0.3s ease-out;
+    }
+
+    @@keyframes fadeSlide {
+        from {
+            opacity: 0;
+            transform: translateY(-8px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Tabla de permisos */
+    .permisos-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        background: #ffffff;
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+
+    .permisos-table th {
+        background-color: #f5f2fc;
+        color: #4a3b6e;
+        font-weight: 600;
+        padding: 12px 16px;
+        border-bottom: 1px solid #e6dfef;
+    }
+
+    .permisos-table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #f1edf7;
+        color: #2c2a3a;
+    }
+
+    .permisos-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .badge-categoria {
+        background-color: #e0d6f0;
+        color: #51427a;
+        padding: 4px 10px;
+        border-radius: 40px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        display: inline-block;
+    }
+
+    .alert-pastel {
+        background-color: #fff7e5;
+        border-left: 4px solid #f5c542;
+        padding: 14px 20px;
+        border-radius: 18px;
+        color: #8e6f2e;
+        font-size: 0.9rem;
+    }
+</style>
+
+<div class="pastel-container">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+        <div>
+            <h2 style="color: #5a4a7a; font-weight: 500; margin-bottom: 8px;">📋 Permisos por rol</h2>
+            <p style="color: #8b7aa8; margin-bottom: 32px;">Informe generado el @DateTime.Now.ToString("dd/MM/yyyy HH:mm")</p>
+        </div>
+        <div>
+            <a href="@Url.Action("ExportarExcel", "Reporte")" class="btn-excel" style="background-color: #e6e0f0; color: #3b2b5c; padding: 10px 20px; border-radius: 40px; text-decoration: none; font-weight: 500; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s;">
+                📎 Exportar a Excel
+            </a>
+        </div>
+    </div>
+
+    @foreach (var rol in Model)
+    {
+        <div class="rol-card" data-role-id="@rol.GroupGuid">
+            <div class="rol-header" onclick="togglePermisos('@rol.GroupGuid')">
+                <div>
+                    <div class="rol-titulo">@rol.Description</div>
+                    @if (!string.IsNullOrEmpty(rol.Email))
+                    {
+                        <div class="rol-email" style="margin-top: 8px;">📧 @rol.Email</div>
+                    }
+                </div>
+                <div class="rol-icono" id="icon-@rol.GroupGuid">▶</div>
+            </div>
+            <div class="rol-body" id="body-@rol.GroupGuid">
+                @if (rol.AccionesPermitidas.Any())
+                {
+                    <table class="permisos-table">
+                        <thead>
+                            <tr>
+                                <th>Categoría</th>
+                                <th>Acción</th>
+                                <th>Descripción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var accion in rol.AccionesPermitidas)
+                            {
+                                <tr>
+                                    <td><span class="badge-categoria">@accion.Categoria</span></td>
+                                    <td>@accion.Nombre</td>
+                                    <td>@accion.Descripcion</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <div class="alert-pastel">
+                        🧸 Este rol aún no tiene permisos asignados.
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<script>
+    // Función que muestra solo el rol seleccionado (oculta todos los demás)
+    function togglePermisos(selectedGuid) {
+        const allBodies = document.querySelectorAll('.rol-body');
+        const allIcons = document.querySelectorAll('.rol-icono');
+
+        // Si el cuerpo seleccionado ya está visible, lo ocultamos (toggle)
+        const selectedBody = document.getElementById('body-' + selectedGuid);
+        const selectedIcon = document.getElementById('icon-' + selectedGuid);
+        
+        const isCurrentlyVisible = selectedBody.classList.contains('visible');
+
+        // Primero ocultamos todos los cuerpos y cambiamos íconos a ▶
+        allBodies.forEach(body => {
+            body.classList.remove('visible');
+        });
+        allIcons.forEach(icon => {
+            icon.innerHTML = '▶';
+        });
+
+        // Si NO estaba visible, mostramos el seleccionado
+        if (!isCurrentlyVisible) {
+            selectedBody.classList.add('visible');
+            selectedIcon.innerHTML = '▼';
+        }
+        // Si estaba visible, lo dejamos oculto (todos cerrados)
+    }
+</script>

@@ -1,0 +1,433 @@
+﻿@using System.Text.Encodings.Web
+@model PasadorScript.ViewModels.PullRequestForceManualViewModel
+@inject PasadorScript.Services.AdGroups.IAdGroupService _adGroupService
+@{
+    ViewData["Title"] = $"PR #{Model.PullRequestId} - {Model.Title}";
+}
+
+<div class="container-fluid">
+    <!-- Banner de advertencia para build faltante -->
+    @if (Model.Status == "completed" && (Model.Build == null || !Model.Build.IsSuccessful))
+    {
+        <div class="alert alert-warning alert-dismissible fade show mb-0" role="alert">
+            <div class="container-fluid">
+                <div class="row align-items-center">
+                    <div class="col">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>¡Atención!</strong> El build automático no se ejecutó para este PR completado.
+                    </div>
+                    @{
+                        var iu = await _adGroupService.GetInfoUser();
+                        var validGroups = new List<string>() { "IYC" };
+                    }
+                    <div class="col-auto">
+                        <form method="post" id="formPR">
+                            @if (iu.Roles.Any(x => validGroups.Contains(x.GroupName)))
+                            {
+                                <input type="hidden" name="PullRequestId" value="@Model.PullRequestId" />
+                                <input type="hidden" name="Owner" value="@Model.Owner" />
+                                <input type="hidden" name="Repository" value="@Model.Repository.Name" />
+                                <input type="hidden" name="DefinitionId" value="@ViewBag.DefinitionId" />
+                                @if (ViewBag.Gx)
+                                {
+                                    <button class="btn btn-warning btnForm" data-action="/PullRequest/ForceToManualBuild" title="Build del último PR mergeado a main">
+                                        <i class="fas fa-play-circle"></i> Forzar Build Manual
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-warning btnForm" data-action="/PullRequest/ForceToManualBuildScript" title="Build del último PR mergeado a main">
+                                        <i class="fas fa-play-circle"></i> Forzar Build Manual
+                                    </button>
+                                }
+
+
+                            }
+                            @if (iu.Username == Model.Owner)
+                            {
+                                <input type="hidden" name="PullRequestId" value="@Model.PullRequestId" />
+                                <input type="hidden" name="Owner" value="@Model.Owner" />
+                                <input type="hidden" name="Repository" value="@Model.Repository.Name" />
+                                <input type="hidden" name="DefinitionId" value="@ViewBag.DefinitionId" />
+
+                                <button class="btn btn-warning btnForm" data-action="/PullRequest/RecreatePullRequest" title="Regenerar branch y pullRequest">
+                                    <i class="fas fa-rocket"></i> Repasar
+                                </button>
+
+                            }
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    <!-- Header del PR -->
+    <div class="row bg-light py-4 border-bottom">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h1>Información de PullRequest #@Model.PullRequestId</h1>
+                    <h3 class="h3 mb-2">@Model.Title</h3>
+                    <!--<div class="d-flex align-items-center gap-3 mb-2">-->
+                    <div>
+                        <span>Estado del PR: </span>
+                        <span class="@Model.StatusBadgeClass">
+                            @Model.StatusLabel
+                        </span>
+                        <span>Aplicación/Repositorio: </span>
+                        <span class="badge bg-secondary">@Model.Repository.Name</span>
+                    </div>
+                    <p class="text-muted mb-0">
+                        <i class="fas fa-code-branch"></i>
+                        De <strong>@Model.SourceRefName.Replace("refs/heads/", "")</strong>
+                        a <strong>@Model.TargetRefName.Replace("refs/heads/", "")</strong>
+                    </p>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <!-- Columna izquierda - Información principal -->
+        <div class="col-md-8">
+            <!-- Descripción -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-file-alt"></i> Descripción
+                    </h5>
+                </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrEmpty(Model.Description))
+                    {
+                        <div class="markdown-body">@Html.Raw(Model.Description)</div>
+                    }
+                    else
+                    {
+                        <p class="text-muted fst-italic">No hay descripción proporcionada.</p>
+                    }
+                </div>
+            </div>
+
+            <!-- Información de Commits -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-code-commit"></i> Información de Commits
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Source Commit</h6>
+                            <p class="mb-1">
+                                <code>@Model.LastMergeSourceCommit.CommitId.Substring(0, 8)</code>
+                            </p>
+                            <small class="text-muted">@Model.LastMergeSourceCommit.CommitId</small>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Target Commit</h6>
+                            <p class="mb-1">
+                                <code>@Model.LastMergeTargetCommit.CommitId.Substring(0, 8)</code>
+                            </p>
+                            <small class="text-muted">@Model.LastMergeTargetCommit.CommitId</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Información del Build -->
+            @if (Model.Build != null)
+            {
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-hammer"></i> Build
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        @{
+                            var buildStatusBadge = Model.Build.Status switch
+                            {
+                                "completed" when Model.Build.Result == "succeeded" => "badge bg-success",
+                                "completed" when Model.Build.Result == "failed" => "badge bg-danger",
+                                "completed" when Model.Build.Result == "canceled" => "badge bg-warning",
+                                "inProgress" => "badge bg-info",
+                                "notStarted" => "badge bg-count",
+                                _ => "badge bg-secondary"
+                            };
+
+                            var buildStatusText = Model.Build.Status switch
+                            {
+                                "completed" when Model.Build.Result == "succeeded" => "Exitoso",
+                                "completed" when Model.Build.Result == "failed" => "Fallido",
+                                "completed" when Model.Build.Result == "canceled" => "Cancelado",
+                                "inProgress" => "en progreso",
+                                "notStarted" => "no iniciado",
+                                _ => Model.Build.Status
+                            };
+                        }
+                        <div class="mb-2">
+                            <span class="@buildStatusBadge">@buildStatusText</span>
+                        </div>
+                        @if (Model.Build.StartTime.HasValue)
+                        {
+                            <div class="small">
+                                <strong>Inicio:</strong>
+                                @Model.Build.StartTimeArgentina!.Value.ToString("dd/MM/yyyy HH:mm")
+                            </div>
+                        }
+                        @if (Model.Build.FinishTime.HasValue)
+                        {
+                            <div class="small">
+                                <strong>Fin:</strong>
+                                @Model.Build.FinishTimeArgentina!.Value.ToString("dd/MM/yyyy HH:mm")
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(Model.Build.SourceBranch))
+                        {
+                            <div class="small mt-2">
+                                <strong>Rama:</strong>
+                                @Model.Build.SourceBranch.Replace("refs/heads/", "")
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- Enlaces rápidos -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-link"></i> Enlaces
+                    </h5>
+                </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrEmpty(Model.Url))
+                    {
+                        <a href="@Model.Url" target="_blank" class="btn btn-outline-primary btn-sm w-100 mb-2">
+                            <i class="fas fa-external-link-alt"></i> Ver en Azure DevOps
+                        </a>
+                    }
+
+                </div>
+            </div>
+            <a class="btn btn-secondary" href="@ViewBag.ReturnUrl">Volver</a>
+        </div>
+
+        <!-- Columna derecha - Metadatos -->
+        <div class="col-md-4">
+            <!-- Información del Autor -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-user"></i> Creado por
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        @if (!string.IsNullOrEmpty(Model.CreatedBy.ImageUrl))
+                        {
+                            var imgsrc = $"/api/Handler/imagen-devops?url={UrlEncoder.Default.Encode(Model.CreatedBy.ImageUrl)}";
+                            <img src="@imgsrc"
+                                 alt="@Model.CreatedBy.DisplayName"
+                                 class="rounded-circle me-3"
+                                 width="48"
+                                 height="48">
+                        }
+                        <div>
+                            <h6 class="mb-1">@Model.CreatedBy.DisplayName</h6>
+                            <p class="text-muted mb-0 small">@Model.CreatedBy.UniqueName</p>
+                            <small class="text-muted">
+                                <i class="fas fa-calendar"></i>
+                                @Model.CreationDateArgentina.ToString("dd/MM/yyyy HH:mm")
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Estado del Merge -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-code-merge"></i> Estado del Merge
+                    </h5>
+                </div>
+                <div class="card-body">
+                    @{
+                        var mergeStatusBadge = Model.MergeStatus switch
+                        {
+                            "succeeded" => "badge bg-success",
+                            "failed" => "badge bg-danger",
+                            "conflicts" => "badge bg-warning",
+                            "queued" => "badge bg-info",
+                            "rejectedByPolicy" => "badge bg-danger",
+                            _ => "badge bg-secondary"
+                        };
+
+                        var mergeStatusText = Model.MergeStatus switch
+                        {
+                            "succeeded" => "Exitoso",
+                            "failed" => "Fallido",
+                            "conflicts" => "Conflictos",
+                            "queued" => "En cola",
+                            "rejectedByPolicy" => "Rechazado por políticas",
+                            _ => Model.MergeStatus
+                        };
+                    }
+                    <span class="@mergeStatusBadge">@mergeStatusText</span>
+                </div>
+            </div>
+
+            <!-- Revisores -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-users"></i> Revisores
+                    </h5>
+                </div>
+                <div class="card-body">
+                    @if (Model.Reviewers != null && Model.Reviewers.Any())
+                    {
+                        foreach (var reviewer in Model.Reviewers)
+                        {
+                            var reviewerBadge = reviewer.Vote switch
+                            {
+                                10 => "badge bg-success",
+                                5 => "badge bg-warning",
+                                -10 => "badge bg-danger",
+                                -5 => "badge bg-secondary",
+                                _ => "badge bg-light text-dark"
+                            };
+
+                            var voteText = reviewer.Vote switch
+                            {
+                                10 => "Aprobado",
+                                5 => "Aprobado con sugerencias",
+                                -10 => "Rechazado",
+                                -5 => "Esperando autor",
+                                _ => "Sin voto"
+                            };
+
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <div class="d-flex align-items-center">
+                                    @if (!string.IsNullOrEmpty(reviewer.ImageUrl))
+                                    {
+                                        var imgsrc = $"/api/Handler/imagen-devops?url={UrlEncoder.Default.Encode(reviewer.ImageUrl)}";
+
+                                        <img src="@imgsrc"
+                                             alt="@reviewer.DisplayName"
+                                             class="rounded-circle me-2"
+                                             width="32"
+                                             height="32">
+                                    }
+                                    <span class="small">@reviewer.DisplayName</span>
+                                </div>
+                                <span class="@reviewerBadge small">@voteText</span>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <p class="text-muted small mb-0">No hay revisores asignados.</p>
+                    }
+                </div>
+            </div>
+
+
+        </div>
+    </div>
+</div>
+
+<style>
+    .markdown-body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+
+    .card {
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        border: 1px solid rgba(0, 0, 0, 0.125);
+    }
+
+    .card-header {
+        background-color: rgba(0, 0, 0, 0.03);
+        border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+    }
+</style>
+@section Scripts {
+    <script>
+        // Escuchar los dos botones que comparten lógica de envío
+        document.querySelectorAll('.btnForm').forEach(button => {
+            button.addEventListener('click', async function (e) {
+                e.preventDefault(); // ✅ Agregar esto
+                const form = document.getElementById("formPR");
+                const formData = new FormData(form);
+
+                // Componer el payload
+                // const payload = {
+                //     PullRequestId: formData.get('PullRequestId'),
+                //     Owner: formData.get('Owner'),
+                //     Repository: formData.get('Repository'),
+                //     DefinitionId: formData.get('DefinitionId')
+                // };
+
+                // Leer la URL de acción desde el botón presionado
+                const actionUrl = this.dataset.action;
+
+                try {
+
+                    // Mostrar loading
+                    Swal.fire({
+                        title: 'Procesando...',
+                        text: 'Regenerando pullRequest, por favor espera',
+                        allowOutsideClick: false,
+                        showConfirmButton: false,
+                        willOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    // const response = await fetch(actionUrl, {
+                    //     method: 'POST',
+                    //     headers: {
+                    //         'Content-Type': 'application/json'
+                    //     },
+                    //     body: JSON.stringify(request=payload)
+                    // });
+                    const response = await fetch(actionUrl, {
+                        method: 'POST',
+                        body: new FormData(form)
+                    });
+
+                    const result = await response.json();
+
+                    if (!result.success) {
+                        // Si vino con errores de validación del modelo
+                        if (result.errors) {
+                            Swal.fire({
+                                title: result.message,
+                                html: result.errors,
+                                icon: "warning"
+                            });
+                            return;
+                        }
+                    } else {
+                        window.location.href = result.redirectUrl;
+                    }
+                } catch (err) {
+                    console.error(err);
+
+                    Swal.fire({
+                        title: "Error",
+                        text: "Error al enviar solicitud.",
+                        icon: "warning"
+                    });
+                }
+            });
+        });
+    </script>
+}
+

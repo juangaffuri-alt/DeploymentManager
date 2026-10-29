@@ -1,0 +1,527 @@
+﻿@model PasadorScript.ViewModels.DetailSqlExplorerViewModel
+
+@{
+    ViewData["Title"] = $"Sql File Detail";
+}
+
+@section Styles {
+    <style>
+        .file-header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .nav-tabs .nav-link.active {
+            font-weight: bold;
+            border-bottom: 3px solid #0d6efd;
+        }
+
+        .code-container {
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            height: 500px;
+            position: relative;
+        }
+
+        .commit-info {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+
+        .historyList, .compareInfo {
+            padding: 10px;
+        }
+
+        .history-item {
+            border-bottom: 1px solid #dee2e6;
+            padding: 10px 0;
+        }
+
+            .history-item:last-child {
+                border-bottom: none;
+            }
+
+        .compare-container {
+            height: 500px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            color: #6c757d;
+        }
+
+        .editor-placeholder {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            color: #6c757d;
+            background-color: #f8f9fa;
+        }
+
+        .monaco-editor-container {
+            height: 100%;
+            width: 100%;
+        }
+    </style>
+}
+
+<div class="container-fluid">
+    <!-- Header con información del archivo -->
+    <div class="file-header">
+        <h4>
+            @Html.Raw(Model.TypeIcon)
+            @Model.DisplayName
+            @Html.Raw(Model.TypeBadge)
+        </h4>
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <span class="badge bg-secondary">Repository: @Model.RepositoryId</span>
+                <small class="text-muted">@Model.FilePath</small>
+            </div>
+            <a class="btn btn-secondary" href="@ViewBag.ReturnUrl">Volver</a>
+        </div>
+    </div>
+
+    <!-- Tabs de navegación -->
+    <ul class="nav nav-tabs" id="fileTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="content-tab" data-bs-toggle="tab" data-bs-target="#content" type="button" role="tab" aria-controls="content" aria-selected="true">Contenido</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history" type="button" role="tab" aria-controls="history" aria-selected="false">Histórico</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="compare-tab" data-bs-toggle="tab" data-bs-target="#compare" type="button" role="tab" aria-controls="compare" aria-selected="false">Comparar</button>
+        </li>
+    </ul>
+
+    <!-- Contenido de los tabs -->
+    <div class="tab-content" id="fileTabsContent">
+        <!-- Tab de Content -->
+        <div class="tab-pane fade show active" id="content" role="tabpanel" aria-labelledby="content-tab">
+            <div class="mt-3">
+                <!-- Información del archivo -->
+                <div class="commit-info">
+                    <div><strong>Base de datos:</strong> @Model.RepositoryId</div>
+                    <div><strong>Path:</strong> @Model.FilePath</div>
+                    <div><strong>Ult. actualización:</strong> <span id="lastUpdated">Loading...</span></div>
+                </div>
+
+                <!-- Contenido del archivo con Monaco -->
+                <div class="code-container">
+                    <div id="contentEditor" class="monaco-editor-container">
+                        <div class="editor-placeholder">Loading Monaco Editor...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab de History -->
+        <div class="tab-pane fade" id="history" role="tabpanel" aria-labelledby="history-tab">
+            <div class="mt-3">
+                <!-- Lista de commits/historial -->
+                <div id="historyList" class="historyList">
+                    <div class="loading">Loading history...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab de Compare -->
+        <div class="tab-pane fade" id="compare" role="tabpanel" aria-labelledby="compare-tab">
+            <div class="mt-3">
+                <!-- Selectores para comparar versiones -->
+                <div class="compareInfo">
+                    <div class="row mb-3">
+                        <div class="col-md-5">
+                            <label for="sourceVersion" class="form-label">Version origen</label>
+                            <select class="form-select" id="sourceVersion">
+                                <option value="">Seleccione versión...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-center justify-content-center">
+                            <span class="fs-4">→</span>
+                        </div>
+                        <div class="col-md-5">
+                            <label for="targetVersion" class="form-label">Version destino</label>
+                            <select class="form-select" id="targetVersion">
+                                <option value="">Seleccione versión...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Comparación con Monaco Diff Editor -->
+                    <div class="compare-container">
+                        <div id="compareEditor" class="monaco-editor-container">
+                            <div class="editor-placeholder">Loading Diff Editor...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- Monaco Editor -->
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.33.0/min/vs/loader.js"></script>
+
+    <!-- JavaScript personalizado con Monaco Editor -->
+    <script>
+        // Datos del modelo de C# convertidos a JavaScript
+        const fileData = {
+            repositoryId: "@Model.RepositoryId",
+            filePath: "@Model.FilePath",
+            history: @Html.Raw(Json.Serialize(Model.History)),
+            fileName: "@System.IO.Path.GetFileName(Model.FilePath)",
+            fileExtension: "@System.IO.Path.GetExtension(Model.FilePath)".toLowerCase(),
+            fileContent: `@Html.Raw(Model.FileContent?.Replace("`", "\\`") ?? "// No content available")`
+        };
+
+        // Variables globales para los editores
+        let contentEditor = null;
+        let compareEditor = null;
+        let currentLanguage = 'sql';
+        let isMonacoInitialized = false;
+
+        // Determinar el lenguaje basado en la extensión del archivo
+        function getLanguageFromExtension(extension) {
+            const languageMap = {
+                '.sql': 'sql',
+                '.cs': 'csharp',
+                '.js': 'javascript',
+                '.ts': 'typescript',
+                '.html': 'html',
+                '.css': 'css',
+                '.json': 'json',
+                '.xml': 'xml',
+                '.py': 'python',
+                '.java': 'java',
+                '.php': 'php',
+                '.rb': 'ruby',
+                '.go': 'go',
+                '.rs': 'rust',
+                '.md': 'markdown',
+                '.yml': 'yaml',
+                '.yaml': 'yaml',
+                '.txt': 'plaintext',
+                '.ps1': 'powershell',
+                '.bat': 'bat',
+                '.sh': 'shell'
+            };
+            return languageMap[extension] || 'plaintext';
+        }
+
+        // Función para formatear fechas
+        function formatDate(dateString) {
+            try {
+                const date = new Date(dateString);
+                if (isNaN(date.getTime())) {
+                    return dateString;
+                }
+
+                const now = new Date();
+                const diffMs = now - date;
+                const diffMins = Math.floor(diffMs / 60000);
+                const diffHours = Math.floor(diffMs / 3600000);
+                const diffDays = Math.floor(diffMs / 86400000);
+
+                if (diffMins < 1) return "Justo ahora";
+                if (diffMins < 60) return `${diffMins} minutos atrás`;
+                if (diffHours < 24) return `${diffHours} horas atrás`;
+                if (diffDays === 1) return "1 día atrás";
+                return date.toLocaleString();
+            } catch (error) {
+                console.error('Error formatting date:', error);
+                return dateString;
+            }
+        }
+
+        // Inicializar Monaco Editor de forma segura
+        function initializeMonaco() {
+            if (isMonacoInitialized) return;
+
+            // Configurar la ruta de Monaco
+            require.config({
+                paths: {
+                    'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.33.0/min/vs'
+                }
+            });
+
+            // Cargar Monaco
+            require(['vs/editor/editor.main'], function () {
+                isMonacoInitialized = true;
+
+                // Determinar el lenguaje del archivo
+                currentLanguage = getLanguageFromExtension(fileData.fileExtension);
+
+                try {
+                    // Inicializar editor de contenido
+                    const contentContainer = document.getElementById('contentEditor');
+                    if (contentContainer) {
+                        contentContainer.innerHTML = '';
+                        contentEditor = monaco.editor.create(contentContainer, {
+                            value: fileData.fileContent || '// No content available\n',
+                            language: currentLanguage,
+                            readOnly: true,
+                            theme: 'vs-light',
+                            minimap: { enabled: true },
+                            automaticLayout: true,
+                            wordWrap: 'on',
+                            fontSize: 14,
+                            lineNumbers: 'on',
+                            folding: true,
+                            scrollBeyondLastLine: false
+                        });
+                    }
+
+                    // Inicializar editor de comparación
+                    const compareContainer = document.getElementById('compareEditor');
+                    if (compareContainer) {
+                        compareContainer.innerHTML = '';
+                        compareEditor = monaco.editor.createDiffEditor(compareContainer, {
+                            readOnly: true,
+                            theme: 'vs-light',
+                            minimap: { enabled: false },
+                            automaticLayout: true,
+                            wordWrap: 'on'
+                        });
+
+                        // Establecer modelos vacíos iniciales
+                        const originalModel = monaco.editor.createModel('', currentLanguage);
+                        const modifiedModel = monaco.editor.createModel('', currentLanguage);
+                        compareEditor.setModel({
+                            original: originalModel,
+                            modified: modifiedModel
+                        });
+                    }
+
+                    // Cargar historial y versiones
+                    loadHistory();
+                    loadVersionOptions();
+
+                } catch (error) {
+                    console.error('Error initializing Monaco editors:', error);
+                    showFallbackEditors();
+                }
+            });
+        }
+
+        // Fallback a textareas simples si Monaco falla
+        function showFallbackEditors() {
+            const contentContainer = document.getElementById('contentEditor');
+            if (contentContainer) {
+                contentContainer.innerHTML = '<textarea class="form-control" style="height:100%; font-family: monospace;" readonly>' + (fileData.fileContent || '// No content available') + '</textarea>';
+            }
+
+            const compareContainer = document.getElementById('compareEditor');
+            if (compareContainer) {
+                compareContainer.innerHTML = '<div class="alert alert-warning">Monaco Editor failed to load. Using simple text comparison.</div>' +
+                    '<div class="row h-100">' +
+                    '<div class="col-6"><textarea class="form-control h-100" style="font-family: monospace;" readonly placeholder="Source version"></textarea></div>' +
+                    '<div class="col-6"><textarea class="form-control h-100" style="font-family: monospace;" readonly placeholder="Target version"></textarea></div>' +
+                    '</div>';
+            }
+        }
+
+        // Cargar historial desde el modelo
+        function loadHistory() {
+            const historyList = document.getElementById('historyList');
+            if (!historyList) return;
+
+            if (!fileData.history || fileData.history.length === 0) {
+                historyList.innerHTML = '<div class="text-center text-muted py-3">No hay historial disponible</div>';
+                return;
+            }
+
+            historyList.innerHTML = '';
+
+            fileData.history.forEach(item => {
+                const historyItem = document.createElement('div');
+                historyItem.className = 'history-item';
+                historyItem.innerHTML = `
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <strong>${escapeHtml(item.author || 'Unknown')}</strong>
+                                    <span class="text-muted ms-2">${formatDate(item.date)}</span>
+                                </div>
+                                <span class="badge bg-light text-dark">${item.commitId ? item.commitId.substring(0, 8) : 'N/A'}</span>
+                            </div>
+                            <div class="mt-1">${escapeHtml(item.message || 'No message')}</div>
+                        `;
+                historyList.appendChild(historyItem);
+            });
+
+            // Actualizar última fecha de modificación
+            if (fileData.history.length > 0) {
+                const lastUpdate = fileData.history[0].date;
+                const lastUpdatedElement = document.getElementById('lastUpdated');
+                if (lastUpdatedElement) {
+                    lastUpdatedElement.textContent = formatDate(lastUpdate);
+                }
+            }
+        }
+
+        // Función para escapar HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Cargar opciones de versiones para comparación
+        function loadVersionOptions() {
+            const sourceSelect = document.getElementById('sourceVersion');
+            const targetSelect = document.getElementById('targetVersion');
+            if (!sourceSelect || !targetSelect) return;
+
+            // Limpiar opciones existentes
+            sourceSelect.innerHTML = '<option value="">Seleccione versión...</option>';
+            targetSelect.innerHTML = '<option value="">Seleccione versión...</option>';
+
+            if (!fileData.history || fileData.history.length === 0) {
+                return;
+            }
+
+            // Agregar opciones del historial
+            fileData.history.forEach((item, index) => {
+                const versionName = index === 0 ? 'Actual' : `Version ${index + 1}`;
+                const shortCommitId = item.commitId ? item.commitId.substring(0, 8) : `v${index + 1}`;
+
+                const option1 = document.createElement('option');
+                option1.value = item.commitId || index;
+                option1.textContent = `${versionName} (${shortCommitId})`;
+                sourceSelect.appendChild(option1);
+
+                const option2 = document.createElement('option');
+                option2.value = item.commitId || index;
+                option2.textContent = `${versionName} (${shortCommitId})`;
+                targetSelect.appendChild(option2);
+            });
+
+            // Establecer valores por defecto (último vs anterior)
+            if (fileData.history.length > 1) {
+                sourceSelect.value = fileData.history[1].commitId || 1;
+                targetSelect.value = fileData.history[0].commitId || 0;
+                updateComparison();
+            }
+        }
+
+        // Función para cargar contenido de versiones específicas (para comparación)
+        async function loadVersionContent(commitId) {
+            try {
+                const response = await fetch(`/Files/GetFileContent?repositoryId=${encodeURIComponent(fileData.repositoryId)}&filePath=${encodeURIComponent(fileData.filePath)}&commitId=${encodeURIComponent(commitId)}`);
+
+                if (response.ok) {
+                    return await response.text();
+                } else {
+                    return '// Error loading version content\n';
+                }
+            } catch (error) {
+                console.error('Error loading version content:', error);
+                return '// Error loading version content: ' + error.message + '\n';
+            }
+        }
+
+        // Actualizar comparación cuando cambien las selecciones
+        async function updateComparison() {
+            if (!compareEditor) return;
+
+            const sourceVersion = document.getElementById('sourceVersion')?.value;
+            const targetVersion = document.getElementById('targetVersion')?.value;
+
+            if (!sourceVersion || !targetVersion) {
+                compareEditor.setModel({
+                    original: monaco.editor.createModel('', currentLanguage),
+                    modified: monaco.editor.createModel('', currentLanguage)
+                });
+                return;
+            }
+
+            try {
+                // Mostrar loading
+                compareEditor.setModel({
+                    original: monaco.editor.createModel('// Loading source version...\n', currentLanguage),
+                    modified: monaco.editor.createModel('// Loading target version...\n', currentLanguage)
+                });
+
+                // Cargar contenidos de ambas versiones
+                const [sourceContent, targetContent] = await Promise.all([
+                    loadVersionContent(sourceVersion),
+                    loadVersionContent(targetVersion)
+                ]);
+
+                compareEditor.setModel({
+                    original: monaco.editor.createModel(sourceContent, currentLanguage),
+                    modified: monaco.editor.createModel(targetContent, currentLanguage)
+                });
+            } catch (error) {
+                console.error('Error updating comparison:', error);
+            }
+        }
+
+        // Re-layout de editores cuando cambia el tamaño de la ventana o tabs
+        function layoutEditors() {
+            setTimeout(() => {
+                if (contentEditor) {
+                    try {
+                        contentEditor.layout();
+                    } catch (e) {
+                        console.error('Error laying out content editor:', e);
+                    }
+                }
+                if (compareEditor) {
+                    try {
+                        compareEditor.layout();
+                    } catch (e) {
+                        console.error('Error laying out compare editor:', e);
+                    }
+                }
+            }, 100);
+        }
+
+        // Inicializar cuando el DOM esté listo
+        document.addEventListener('DOMContentLoaded', function () {
+            // Inicializar Monaco Editor con retraso para evitar conflictos
+            setTimeout(() => {
+                try {
+                    initializeMonaco();
+                } catch (error) {
+                    console.error('Error initializing Monaco:', error);
+                    showFallbackEditors();
+                    loadHistory();
+                    loadVersionOptions();
+                }
+            }, 100);
+
+            // Configurar event listeners
+            const sourceSelect = document.getElementById('sourceVersion');
+            const targetSelect = document.getElementById('targetVersion');
+            if (sourceSelect) sourceSelect.addEventListener('change', updateComparison);
+            if (targetSelect) targetSelect.addEventListener('change', updateComparison);
+
+            // Ajustar layout cuando cambie de tab
+            const tabEls = document.querySelectorAll('[data-bs-toggle="tab"]');
+            tabEls.forEach(tabEl => {
+                tabEl.addEventListener('shown.bs.tab', function () {
+                    layoutEditors();
+                });
+            });
+
+            // Ajustar layout cuando cambie el tamaño de la ventana
+            window.addEventListener('resize', layoutEditors);
+        });
+
+        
+
+    </script>
+}

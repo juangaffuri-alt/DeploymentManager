@@ -1,0 +1,226 @@
+﻿@model PasadorScript.ViewModels.MiTurnoDetalleViewModel
+@section Styles {
+    <link rel="stylesheet" href="~/css/turnos.css" />
+}
+@{
+    ViewData["Title"] = "Modificando Entorno";
+}
+
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <!-- Tarjeta de modificación en curso -->
+            <div class="card border-success shadow-lg">
+                <div class="card-header bg-success text-white py-3">
+                    <h4 class="mb-0">
+                        <i class="fas fa-cog fa-spin"></i>
+                        Modificando entorno @Model.EntornoNombre
+                    </h4>
+                </div>
+
+                <div class="card-body text-center p-5">
+                    <!-- Icono animado -->
+                    <div class="mb-4">
+                        <i class="fas fa-database fa-5x text-success fa-beat-fade"
+                           style="--fa-beat-fade-opacity: 0.8; --fa-beat-fade-scale: 0.9;"></i>
+                    </div>
+
+                    <h2 class="mb-3">Tienes el control del entorno</h2>
+
+                    <!-- Timer grande -->
+                    <div class="display-1 fw-bold text-success mb-4" id="timer">
+                        @(Model.Ejecutado ? $"{Model.MinutosRestantes}:00" : $"{Model.MinutosParaEjecucionRestantes}:00")
+                    </div>
+
+                    <!-- Barra de progreso -->
+                    <div class="progress mb-4" style="height: 30px;">
+                        @{
+                            double porcentajeInicial = 0;
+                            if (Model.Ejecutado && Model.MinutosRestantes.HasValue && Model.MinutosDuracion > 0)
+                            {
+                                porcentajeInicial = 100 - ((double)Model.MinutosRestantes.Value / Model.MinutosDuracion * 100);
+                            }
+                            else if (!Model.Ejecutado && Model.MinutosParaEjecucionRestantes.HasValue && Model.MinutosParaEjecucion > 0)
+                            {
+                                porcentajeInicial = 100 - ((double)Model.MinutosParaEjecucionRestantes.Value / Model.MinutosParaEjecucion * 100);
+                            }
+                        }
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                             style="width: @porcentajeInicial%">
+                            @porcentajeInicial.ToString("F0")% completado
+                        </div>
+                    </div>
+
+                    <!-- Información adicional -->
+                    <div class="row justify-content-center mb-4">
+                        <div class="col-md-4">
+                            <div class="border rounded p-3">
+                                <small class="text-muted">Inicio del turno</small>
+                                <p class="h5">@(Model.InicioModificacion?.ToString("HH:mm") ?? "N/A")</p>
+                            </div>
+                        </div>
+                        @if (Model.Ejecutado)
+                        {
+                            <div class="col-md-4">
+                                <div class="border rounded p-3">
+                                    <small class="text-muted">Ejecutado a las</small>
+                                    <p class="h5">@(Model.FechaEjecucion?.ToString("HH:mm") ?? "N/A")</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="border rounded p-3">
+                                    <small class="text-muted">Fin estimado</small>
+                                    <p class="h5">@(Model.FinEstimado?.ToString("HH:mm") ?? "N/A")</p>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="col-md-4">
+                                <div class="border rounded p-3">
+                                    <small class="text-muted">Ejecución en</small>
+                                    <p class="h5">@(Model.InicioEjecucion?.ToString("HH:mm") ?? "N/A")</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="border rounded p-3">
+                                    <small class="text-muted">Fin estimado</small>
+                                    <p class="h5">@(Model.FinEstimado?.ToString("HH:mm") ?? "N/A")</p>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Botones de acción -->
+                    <div class="d-grid gap-3 col-md-6 mx-auto">
+                        <button class="btn btn-warning btn-lg" onclick="confirmarLiberacion()">
+                            <i class="fas fa-flag-checkered"></i>
+                            Marcar como completado
+                        </button>
+
+                        <small class="text-muted">
+                            <i class="fas fa-info-circle"></i>
+                            Recuerda liberar el turno cuando termines para que otros puedan continuar
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card de advertencia de tiempo -->
+            <div class="card mt-4 border-warning" id="warningCard" style="display: none;">
+                <div class="card-body text-center">
+                    <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+                    <h5 class="text-warning">¡Tiempo por agotarse!</h5>
+                    <p>Quedan menos de 5 minutos. Asegúrate de finalizar pronto.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de confirmación -->
+<div class="modal fade" id="modalCompletado" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-check-circle"></i> Confirmar finalización
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Has terminado de modificar el entorno?</p>
+                <p class="text-muted small">Al confirmar, liberarás el turno para el siguiente en la cola.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    Seguir modificando
+                </button>
+                <form asp-action="Liberar" asp-route-id="@Model.Id" method="post">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-success">
+                        Sí, liberar turno
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Obtener valores del modelo
+        let ejecutado = @Model.Ejecutado.ToString().ToLower();
+        let minutosRestantes = @(Model.Ejecutado? Model.MinutosRestantes ?? 0 : Model.MinutosParaEjecucionRestantes ?? 0);
+        let minutosTotal = @(Model.Ejecutado? Model.MinutosDuracion: Model.MinutosParaEjecucion);
+        let segundos = 0;
+        let timerInterval;
+        let warningCard = document.getElementById('warningCard');
+        let timerElement = document.getElementById('timer');
+        let progressBar = document.querySelector('.progress-bar');
+
+        function actualizarTimer() {
+            if (minutosRestantes === 0 && segundos === 0) {
+                clearInterval(timerInterval);
+                // Redirigir a MiTurno para ver el estado actual (evita loop infinito)
+                window.location.href = '@Url.Action("MiTurno", new { id = Model.Id })';
+                return;
+            }
+
+            if (segundos === 0) {
+                minutosRestantes--;
+                segundos = 59;
+            } else {
+                segundos--;
+            }
+
+            // Actualizar display del timer
+            timerElement.textContent = `${minutosRestantes}:${segundos.toString().padStart(2, '0')}`;
+
+            // Calcular y actualizar barra de progreso
+            let minutosTranscurridos = minutosTotal - (minutosRestantes + segundos/60);
+            let porcentaje = (minutosTranscurridos / minutosTotal) * 100;
+            porcentaje = Math.min(100, Math.max(0, porcentaje));
+            progressBar.style.width = porcentaje + '%';
+            progressBar.textContent = Math.round(porcentaje) + '% completado';
+
+            // Mostrar warning si quedan pocos minutos
+            if (minutosRestantes < 5) {
+                warningCard.style.display = 'block';
+            } else {
+                warningCard.style.display = 'none';
+            }
+
+            // Cambiar color del timer si queda poco tiempo
+            if (minutosRestantes < 3) {
+                timerElement.classList.add('text-danger');
+                timerElement.classList.remove('text-success');
+            } else {
+                timerElement.classList.add('text-success');
+                timerElement.classList.remove('text-danger');
+            }
+        }
+
+        // Iniciar timer solo si hay tiempo positivo
+        if (minutosRestantes > 0 || segundos > 0) {
+            timerInterval = setInterval(actualizarTimer, 1000);
+        } else {
+            // Si ya está en 0, redirigir inmediatamente
+            window.location.href = '@Url.Action("MiTurno", new { id = Model.Id })';
+        }
+
+        function confirmarLiberacion() {
+            new bootstrap.Modal(document.getElementById('modalCompletado')).show();
+        }
+
+        // Prevenir cierre accidental
+        window.onbeforeunload = function() {
+            return "¿Estás seguro de que quieres salir? Perderás el control del entorno.";
+        };
+
+        // Remover prevención al liberar
+        document.querySelector('form[asp-action="Liberar"]').addEventListener('submit', function() {
+            window.onbeforeunload = null;
+        });
+    </script>
+}

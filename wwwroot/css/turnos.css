@@ -1,0 +1,63 @@
+﻿/* wwwroot/css/turnos.css */
+
+.fa-beat-fade {
+    -webkit-animation: fa-beat-fade 1s infinite linear;
+    animation: fa-beat-fade 1s infinite linear;
+}
+
+@keyframes fa-beat-fade {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.8;
+        transform: scale(0.9);
+    }
+}
+
+/* Animación para el timer cuando queda poco tiempo */
+.text-danger {
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+/* Estilos para las cards de entornos */
+.card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+    .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15) !important;
+    }
+
+/* Badges personalizados */
+.badge {
+    font-weight: 500;
+    padding: 0.5em 0.8em;
+}
+
+/* Progress bars más estilizadas */
+.progress {
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    transition: width 0.5s ease;
+}

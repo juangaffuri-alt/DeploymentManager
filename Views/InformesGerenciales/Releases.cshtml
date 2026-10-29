@@ -1,0 +1,731 @@
+@using PasadorScript.DTO.Informes
+@using PasadorScript.Helpers
+@using PasadorScript.Services.Informes
+@using X.PagedList
+@using X.PagedList.Mvc.Core
+@using X.PagedList.Mvc.Core.Fluent
+@model PasadorScript.ViewModels.InformeGerencialReleasesFilterViewModel
+
+@{
+    ViewData["Title"] = "Envios";
+    var jsonOpts = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+
+    string TipoChip(string? tipo) => tipo switch
+    {
+        TipoEnvioInforme.Gx => "GX",
+        TipoEnvioInforme.Dlya => "DLYA",
+        TipoEnvioInforme.Script => "Script",
+        _ => tipo ?? string.Empty
+    };
+
+    string FechaCorta(DateTime? value) => value?.ToString("dd/MM HH:mm") ?? string.Empty;
+    string FechaLarga(DateTime? value) => value?.ToString("dd/MM/yyyy HH:mm") ?? string.Empty;
+
+    string StageChip()
+    {
+        if (string.IsNullOrWhiteSpace(Model.UltimoStage))
+            return string.Empty;
+        if (Model.UltimoStage == InformeGerencialReleasesService.FiltroSinRelease)
+            return "Sin release";
+        return Model.Stages.FirstOrDefault(s =>
+                   string.Equals(s.Key, Model.UltimoStage, StringComparison.OrdinalIgnoreCase))
+               ?.Display
+               ?? Model.UltimoStage;
+    }
+
+    object Query(string? omit = null, int? page = null) => new
+    {
+        page,
+        fechaDesde = omit == "fechaDesde" ? null : Model.FechaDesde?.ToString("yyyy-MM-dd"),
+        fechaHasta = omit == "fechaHasta" ? null : Model.FechaHasta?.ToString("yyyy-MM-dd"),
+        fechaImplementadoDesde = omit == "fechaImplementadoDesde" ? null : Model.FechaImplementadoDesde?.ToString("yyyy-MM-dd"),
+        fechaImplementadoHasta = omit == "fechaImplementadoHasta" ? null : Model.FechaImplementadoHasta?.ToString("yyyy-MM-dd"),
+        repoKey = omit == "repoKey" ? null : Model.RepoKey,
+        tipo = omit == "tipo" ? null : Model.Tipo,
+        hotfix = omit == "hotfix" ? null : Model.Hotfix,
+        usuario = omit == "usuario" ? null : Model.Usuario,
+        ultimoStage = omit == "ultimoStage" ? null : Model.UltimoStage,
+        nroIncidente = omit == "nroIncidente" ? null : Model.NroIncidente,
+        tipoReferencia = omit == "tipoReferencia" ? null : Model.TipoReferencia,
+        graficoHotfix = Model.MostrarGraficoHotfix ? "true" : null,
+        graficoDestino = Model.MostrarGraficoDestino ? "true" : null,
+        graficoPruebaAcotada = Model.MostrarGraficoPruebaAcotada ? "true" : null,
+        agruparHotfix = Model.AgruparGraficoHotfix ? "true" : null,
+        agruparDestino = Model.AgruparGraficoDestino ? "true" : null,
+        agruparPruebaAcotada = Model.AgruparGraficoPruebaAcotada ? "true" : null
+    };
+}
+
+@section Styles {
+    <style>
+        .informe-chips {
+            display: flex;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            gap: 0.4rem;
+            align-items: center;
+            padding: 0.1rem 0 0.55rem;
+        }
+
+        .informe-chip {
+            display: inline-flex;
+            align-items: center;
+            flex: 0 0 auto;
+            white-space: nowrap;
+            font-size: 0.75rem;
+            line-height: 1.2;
+            padding: 0.2rem 0.5rem;
+            border-radius: 1rem;
+            background: #f1f1f1;
+            color: #444;
+            border: 1px solid #e0e0e0;
+        }
+
+        .informe-chip-x {
+            margin-left: 0.35rem;
+            color: inherit;
+            opacity: 0.55;
+            text-decoration: none;
+            font-weight: 700;
+            line-height: 1;
+            border: 0;
+            background: transparent;
+            padding: 0;
+            cursor: pointer;
+        }
+
+        .informe-chip-x:hover {
+            opacity: 1;
+            color: #F25961;
+        }
+
+        .informe-gerencial-table {
+            table-layout: fixed;
+            width: 100%;
+            min-width: 1120px;
+            font-size: 0.72rem;
+        }
+
+        .informe-gerencial-table > thead > tr > th,
+        .informe-gerencial-table > tbody > tr > td {
+            padding: 0.14rem 0.22rem !important;
+            font-size: 0.72rem;
+            font-weight: 400;
+            line-height: 1.2;
+            letter-spacing: 0;
+            text-transform: none;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        .informe-gerencial-table > thead > tr > th {
+            font-size: 0.68rem;
+            font-weight: 600;
+        }
+
+        .informe-gerencial-table > thead > tr > th.informe-sep,
+        .informe-gerencial-table > tbody > tr > td.informe-sep {
+            border-left: 1px solid rgba(120, 130, 150, 0.45) !important;
+        }
+
+        .informe-gerencial-table .col-id { width: 7.2%; }
+        .informe-gerencial-table .col-app { width: 5.6%; }
+        .informe-gerencial-table .col-ref { width: 5.8%; }
+        .informe-gerencial-table .col-hf { width: 3.2%; }
+        .informe-gerencial-table .col-pacot { width: 4%; }
+        .informe-gerencial-table .col-desc { width: 8%; }
+        .informe-gerencial-table .col-user { width: 6.4%; }
+        .informe-gerencial-table .col-fecha { width: 7.5%; }
+        .informe-gerencial-table .col-res { width: 5.6%; }
+        .informe-gerencial-table .col-pre { width: 7.4%; }
+        .informe-gerencial-table .col-pre-iyc { width: 5.2%; }
+        .informe-gerencial-table .col-stage { width: 5.6%; }
+        .informe-gerencial-table .col-obj { width: 6%; }
+
+        .informe-gerencial-table .badge {
+            font-size: 0.65rem;
+            padding: 0.05rem 0.28rem;
+            font-weight: 600;
+        }
+
+        .card.informe-tabla-card > .card-body {
+            padding: 0.45rem 0.35rem 0.3rem;
+        }
+
+        .informe-kpi-card {
+            border: 1px solid #eee;
+            border-radius: 6px;
+            padding: 0.75rem 1rem;
+            height: 100%;
+        }
+
+        .informe-kpi-card h5 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0;
+        }
+
+        .informe-kpi-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.35rem;
+        }
+
+        .informe-kpi-head .form-check {
+            margin: 0;
+            padding: 0;
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .informe-kpi-head .form-check-input {
+            margin: 0;
+            flex: 0 0 auto;
+        }
+
+        .informe-kpi-head .form-check-label {
+            margin: 0;
+            font-size: 0.75rem;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .informe-kpi-chart {
+            position: relative;
+            height: 180px;
+        }
+
+        #filtrosOffcanvas {
+            --bs-offcanvas-width: 380px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #filtrosOffcanvas .offcanvas-body {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem 0.75rem;
+            align-content: start;
+            flex: 1 1 auto;
+            overflow-y: auto;
+            overflow-x: visible;
+        }
+
+        #filtrosOffcanvas .span-2 {
+            grid-column: 1 / -1;
+        }
+
+        #filtrosOffcanvas .form-group-default {
+            margin-bottom: 0;
+        }
+
+        #filtrosOffcanvas .form-group-default--usuario {
+            overflow: visible;
+        }
+
+        #filtrosOffcanvas .filtros-seccion {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #495057;
+            margin: 0.65rem 0 0;
+        }
+
+        #filtrosOffcanvas .filtros-seccion:first-child {
+            margin-top: 0;
+        }
+
+        #filtrosOffcanvas .form-check {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 8px 10px;
+            margin: 0;
+            border: 1px solid rgba(0, 0, 0, 0.07);
+            border-radius: 4px;
+            background: #fff;
+        }
+
+        #filtrosOffcanvas .form-check label {
+            margin-bottom: 0;
+            font-size: 0.875rem;
+            white-space: nowrap;
+        }
+
+        #filtrosOffcanvas .offcanvas-footer {
+            flex: 0 0 auto;
+        }
+
+        #sugerencias.dropdown-menu {
+            max-height: 220px;
+            overflow-y: auto;
+        }
+    </style>
+}
+
+<div id="informeGerencialRoot"
+     data-fechas-default="@(Model.FechasSonDefault ? "true" : "false")"
+     data-excel-url="@Url.Action("ExportToExcel", "InformesGerenciales")"
+     data-buscar-usuario-url="@Url.Action("BuscarUsuario", "RuntimeHelper")"
+     data-tablas-type="@((int)TablasType.Todos)">
+    <script type="application/json" id="kpi-hotfix-json">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.KpiHotfix, jsonOpts))</script>
+    <script type="application/json" id="kpi-hotfix-ref-json">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.KpiHotfixReferencias, jsonOpts))</script>
+    <script type="application/json" id="kpi-destino-json">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.KpiDestino, jsonOpts))</script>
+    <script type="application/json" id="kpi-destino-ref-json">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.KpiDestinoReferencias, jsonOpts))</script>
+    <script type="application/json" id="kpi-prueba-acotada-json">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.KpiPruebaAcotada, jsonOpts))</script>
+    <script type="application/json" id="kpi-prueba-acotada-ref-json">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.KpiPruebaAcotadaReferencias, jsonOpts))</script>
+</div>
+
+<form method="get" asp-action="Releases" asp-controller="InformesGerenciales" id="filterForm">
+    <input type="hidden" name="graficoHotfix" id="graficoHotfixField" value="@(Model.MostrarGraficoHotfix ? "true" : "")" />
+    <input type="hidden" name="graficoDestino" id="graficoDestinoField" value="@(Model.MostrarGraficoDestino ? "true" : "")" />
+    <input type="hidden" name="graficoPruebaAcotada" id="graficoPruebaAcotadaField" value="@(Model.MostrarGraficoPruebaAcotada ? "true" : "")" />
+    <input type="hidden" name="agruparHotfix" id="agruparHotfixField" value="@(Model.AgruparGraficoHotfix ? "true" : "")" />
+    <input type="hidden" name="agruparDestino" id="agruparDestinoField" value="@(Model.AgruparGraficoDestino ? "true" : "")" />
+    <input type="hidden" name="agruparPruebaAcotada" id="agruparPruebaAcotadaField" value="@(Model.AgruparGraficoPruebaAcotada ? "true" : "")" />
+
+    <div class="d-flex align-items-left align-items-md-center flex-column flex-md-row pt-2 pb-3">
+        <div>
+            <h3 class="fw-bold mb-2"><i class="fa fa-chart-bar"></i> Envios</h3>
+        </div>
+    </div>
+
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <button type="button" class="btn btn-primary" data-bs-toggle="offcanvas" data-bs-target="#filtrosOffcanvas" title="Filtros">
+            <i class="fas fa-filter me-1"></i> Filtros
+            <span id="filtrosBadge" class="badge badge-danger ms-1" @(Model.CantidadChipsSinFechas > 0 ? null : "hidden")>@Model.CantidadChipsSinFechas</span>
+        </button>
+        <button type="button" class="btn btn-primary" id="btnExportExcel"
+                @(Model.Filas.Any() ? null : "disabled")
+                title="@(Model.Filas.Any() ? "Exportar a Excel" : "No hay datos para exportar")">
+            <i class="fas fa-file-excel me-1"></i> Excel
+        </button>
+        <a id="btnLimpiar" class="btn btn-light" asp-action="Releases" asp-controller="InformesGerenciales"
+           hidden="@(!Model.MostrarLimpiar)">Limpiar</a>
+    </div>
+
+    <div class="informe-chips" id="informeChips">
+        <span class="informe-chip" data-chip="fecha">
+            Desde @(Model.FechaDesde?.ToString("dd/MM/yyyy"))
+            <a class="informe-chip-x" href="@Url.Action("Releases", "InformesGerenciales", Query("fechaDesde", 1))" title="Quitar">&times;</a>
+        </span>
+        <span class="informe-chip" data-chip="fecha">
+            Hasta @(Model.FechaHasta?.ToString("dd/MM/yyyy"))
+            <a class="informe-chip-x" href="@Url.Action("Releases", "InformesGerenciales", Query("fechaHasta", 1))" title="Quitar">&times;</a>
+        </span>
+        @if (Model.FechaImplementadoDesde.HasValue)
+        {
+            <span class="informe-chip" data-chip="filtro">
+                Impl. desde @Model.FechaImplementadoDesde.Value.ToString("dd/MM/yyyy")
+                <a class="informe-chip-x" href="@Url.Action("Releases", "InformesGerenciales", Query("fechaImplementadoDesde", 1))" title="Quitar">&times;</a>
+            </span>
+        }
+        @if (Model.FechaImplementadoHasta.HasValue)
+        {
+            <span class="informe-chip" data-chip="filtro">
+                Impl. hasta @Model.FechaImplementadoHasta.Value.ToString("dd/MM/yyyy")
+                <a class="informe-chip-x" href="@Url.Action("Releases", "InformesGerenciales", Query("fechaImplementadoHasta", 1))" title="Quitar">&times;</a>
+            </span>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.RepoKey))
+        {
+            <span class="informe-chip" data-chip="filtro">
+                App: @Model.RepoKey
+                <a class="informe-chip-x" href="@Url.Action("Releases", "InformesGerenciales", Query("repoKey", 1))" title="Quitar">&times;</a>
+            </span>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.Tipo))
+        {
+            <span class="informe-chip" data-chip="filtro">
+                Tipo: @TipoChip(Model.Tipo)
+                <a class="informe-chip-x" href="@Url.Action("Releases", "InformesGerenciales", Query("tipo", 1))" title="Quitar">&times;</a>
+            </span>
+        }
+        @if (Model.Hotfix.HasValue)
+        {
+            <span class="informe-chip" data-chip="filtro">
+                Hotfix: @(Model.Hotfix == true ? "Sí" : "No")
+                <a class="informe-chip-x" href="@Url.Action("Releases", "InformesGerenciales", Query("hotfix", 1))" title="Quitar">&times;</a>
+            </span>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.TipoReferencia))
+        {
+            <span class="informe-chip" data-chip="filtro">
+                Tipo ref: @Model.TipoReferencia
+                <a class="informe-chip-x" href="@Url.Action("Releases", "InformesGerenciales", Query("tipoReferencia", 1))" title="Quitar">&times;</a>
+            </span>
+        }
+        @if (Model.NroIncidente is > 0)
+        {
+            <span class="informe-chip" data-chip="filtro">
+                Ref: @Model.NroIncidente
+                <a class="informe-chip-x" href="@Url.Action("Releases", "InformesGerenciales", Query("nroIncidente", 1))" title="Quitar">&times;</a>
+            </span>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.Usuario))
+        {
+            <span class="informe-chip" data-chip="filtro">
+                Usuario: @Model.Usuario
+                <a class="informe-chip-x" href="@Url.Action("Releases", "InformesGerenciales", Query("usuario", 1))" title="Quitar">&times;</a>
+            </span>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.UltimoStage))
+        {
+            <span class="informe-chip" data-chip="filtro">
+                Stage: @StageChip()
+                <a class="informe-chip-x" href="@Url.Action("Releases", "InformesGerenciales", Query("ultimoStage", 1))" title="Quitar">&times;</a>
+            </span>
+        }
+        <span class="informe-chip" data-chip="grafico" id="chipGraficoHotfix" @(Model.MostrarGraficoHotfix ? null : "hidden")>
+            Gráfico: Hotfix
+            <button type="button" class="informe-chip-x" data-dismiss-graph="hotfix" title="Quitar">&times;</button>
+        </span>
+        <span class="informe-chip" data-chip="grafico" id="chipGraficoDestino" @(Model.MostrarGraficoDestino ? null : "hidden")>
+            Gráfico: Destino
+            <button type="button" class="informe-chip-x" data-dismiss-graph="destino" title="Quitar">&times;</button>
+        </span>
+        <span class="informe-chip" data-chip="grafico" id="chipGraficoPruebaAcotada" @(Model.MostrarGraficoPruebaAcotada ? null : "hidden")>
+            Gráfico: Prueba acotada
+            <button type="button" class="informe-chip-x" data-dismiss-graph="pruebaAcotada" title="Quitar">&times;</button>
+        </span>
+    </div>
+
+    <div class="text-muted small mb-2" id="kpiEnviosPorReferencia">
+        Envíos por referencia: @Model.TotalReferencias
+    </div>
+
+    <div class="row mb-3" id="graficosRow" @(Model.MostrarGraficoHotfix || Model.MostrarGraficoDestino || Model.MostrarGraficoPruebaAcotada ? null : "hidden")>
+        <div class="col-md-6 mb-3" id="bloqueGraficoHotfix" @(Model.MostrarGraficoHotfix ? null : "hidden")>
+            <div class="informe-kpi-card">
+                <div class="informe-kpi-head">
+                    <h5>Hotfix</h5>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="chkAgruparHotfix"
+                               @(Model.AgruparGraficoHotfix ? "checked" : null) />
+                        <label class="form-check-label" for="chkAgruparHotfix" title="Opcional: cuenta cada tipo y número de referencia una vez por porción">Agrupar por referencia</label>
+                    </div>
+                </div>
+                <div class="text-muted small mb-1" id="kpiHotfixTotal">Total @(Model.KpiHotfix.Total)</div>
+                <p class="text-muted small mb-1" id="kpiHotfixAclaracion" hidden>
+                    Cuenta referencias distintas (tipo + número). La misma referencia puede aparecer en Hotfix y en No hotfix.
+                </p>
+                <ul class="list-unstyled small mb-2" id="kpiHotfixDetalle"></ul>
+                <p class="text-muted small mb-0" id="kpiHotfixVacio" hidden>No hay envíos para los filtros seleccionados</p>
+                <div class="informe-kpi-chart">
+                    <canvas id="chartHotfix"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 mb-3" id="bloqueGraficoDestino" @(Model.MostrarGraficoDestino ? null : "hidden")>
+            <div class="informe-kpi-card">
+                <div class="informe-kpi-head">
+                    <h5>Destino</h5>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="chkAgruparDestino"
+                               @(Model.AgruparGraficoDestino ? "checked" : null) />
+                        <label class="form-check-label" for="chkAgruparDestino" title="Opcional: cuenta cada tipo y número de referencia una vez por porción">Agrupar por referencia</label>
+                    </div>
+                </div>
+                <div class="text-muted small mb-1" id="kpiDestinoTotal">Total @(Model.KpiDestino.Total)</div>
+                <p class="text-muted small mb-1" id="kpiDestinoAclaracion" hidden>
+                    Cuenta referencias distintas (tipo + número). La misma referencia puede aparecer en más de un destino (por ejemplo QA y PROD).
+                </p>
+                <ul class="list-unstyled small mb-2" id="kpiDestinoDetalle"></ul>
+                <p class="text-muted small mb-0" id="kpiDestinoVacio" hidden>No hay envíos para los filtros seleccionados</p>
+                <div class="informe-kpi-chart">
+                    <canvas id="chartDestino"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 mb-3" id="bloqueGraficoPruebaAcotada" @(Model.MostrarGraficoPruebaAcotada ? null : "hidden")>
+            <div class="informe-kpi-card">
+                <div class="informe-kpi-head">
+                    <h5>Prueba acotada</h5>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="chkAgruparPruebaAcotada"
+                               @(Model.AgruparGraficoPruebaAcotada ? "checked" : null) />
+                        <label class="form-check-label" for="chkAgruparPruebaAcotada" title="Opcional: cuenta cada tipo y número de referencia una vez por porción">Agrupar por referencia</label>
+                    </div>
+                </div>
+                <div class="text-muted small mb-1" id="kpiPruebaAcotadaTotal">Total @(Model.KpiPruebaAcotada.Total)</div>
+                <p class="text-muted small mb-1" id="kpiPruebaAcotadaAclaracion" hidden>
+                    Cuenta referencias distintas (tipo + número). La misma referencia puede aparecer en Sí, No y Sin datos.
+                </p>
+                <ul class="list-unstyled small mb-2" id="kpiPruebaAcotadaDetalle"></ul>
+                <p class="text-muted small mb-0" id="kpiPruebaAcotadaVacio" hidden>No hay envíos para los filtros seleccionados</p>
+                <div class="informe-kpi-chart">
+                    <canvas id="chartPruebaAcotada"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card informe-tabla-card">
+        <div class="card-body">
+            @if (!string.IsNullOrWhiteSpace(Model.Advertencia))
+            {
+                <div class="alert alert-warning" role="alert">
+                    <i class="fas fa-exclamation-triangle me-1"></i> @Model.Advertencia
+                </div>
+            }
+
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-sm informe-gerencial-table">
+                    <colgroup>
+                        <col class="col-id" />
+                        <col class="col-app" />
+                        <col class="col-ref" />
+                        <col class="col-hf" />
+                        <col class="col-pacot" />
+                        <col class="col-desc" />
+                        <col class="col-user" />
+                        <col class="col-fecha" />
+                        <col class="col-fecha" />
+                        <col class="col-fecha" />
+                        <col class="col-res" />
+                        <col class="col-pre" />
+                        <col class="col-pre-iyc" />
+                        <col class="col-fecha" />
+                        <col class="col-stage" />
+                        <col class="col-obj" />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th scope="col" title="Identificador del cambio y tipo de envío">ID</th>
+                            <th scope="col" title="Aplicativo">App</th>
+                            <th scope="col" title="Referencia">Ref.</th>
+                            <th scope="col" class="text-center" title="Hotfix">HF</th>
+                            <th scope="col" class="text-center" title="Prueba acotada">P. acot.</th>
+                            <th scope="col" title="Descripción del cambio">Descripción</th>
+                            <th scope="col" class="informe-sep" title="Usuario autor">Usuario</th>
+                            <th scope="col" title="Fecha y hora de creación">Creado</th>
+                            <th scope="col" class="informe-sep" title="Aprobación PRE de QA">Ing. QA</th>
+                            <th scope="col" title="Aprobación POST de QA (solo si está aprobado)">Egr. QA</th>
+                            <th scope="col" title="Resultado de la aprobación POST de QA del último attempt">Res. QA</th>
+                            <th scope="col" class="informe-sep" title="Persona que pre-aprobó producción">Superv.</th>
+                            <th scope="col" title="Persona del rol IyC que pre-aprobó producción">IyC</th>
+                            <th scope="col" title="Fecha y hora en que finalizó el deploy aplicado en producción">Impl.</th>
+                            <th scope="col" title="Último environment con deploy aplicado (succeeded o partiallySucceeded)">Stage</th>
+                            <th scope="col" class="informe-sep" title="Objetos y archivos del envío">Objetos</th>
+                        </tr>
+                    </thead>
+                    @if (Model.Filas.Any())
+                    {
+                        <tbody>
+                            @foreach (var item in Model.Filas)
+                            {
+                                <tr>
+                                    <td title="@($"{item.IdCambio} {item.Tipo}")">
+                                        @if (item.PullRequestId is > 0)
+                                        {
+                                            <a href="@Url.Action("ViewStatus", "Release", new { id = item.PullRequestId, projectType = item.AzureProjectType })"
+                                               title="Estado deploy">@item.IdCambio</a>
+                                        }
+                                        else
+                                        {
+                                            @item.IdCambio
+                                        }
+                                        <span class="text-muted small ms-1">@item.Tipo</span>
+                                    </td>
+                                    <td title="@item.Aplicativo">@item.Aplicativo</td>
+                                    <td title="@(item.NroIncidente > 0 ? item.Referencia : null)">
+                                        @if (item.NroIncidente > 0)
+                                        {
+                                            <span class="badge badge-primary">@item.Referencia</span>
+                                        }
+                                    </td>
+                                    <td class="text-center">
+                                        @if (item.IsHotfix)
+                                        {
+                                            <span class="badge badge-danger">Sí</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge badge-secondary">No</span>
+                                        }
+                                    </td>
+                                    <td class="text-center" title="Prueba acotada">
+                                        @if (item.SinPrueba == true)
+                                        {
+                                            <span class="badge badge-warning">@item.PruebaAcotadaTexto</span>
+                                        }
+                                        else if (item.SinPrueba == false)
+                                        {
+                                            <span class="badge badge-secondary">@item.PruebaAcotadaTexto</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">@item.PruebaAcotadaTexto</span>
+                                        }
+                                    </td>
+                                    <td title="@item.Descripcion">@item.Descripcion</td>
+                                    <td class="informe-sep" title="@item.Usuario">@item.Usuario</td>
+                                    <td title="@FechaLarga(item.FechaCreacionLocal)">@FechaCorta(item.FechaCreacionLocal)</td>
+                                    <td class="informe-sep" title="@FechaLarga(item.FechaIngresoQaLocal)">@FechaCorta(item.FechaIngresoQaLocal)</td>
+                                    <td title="@FechaLarga(item.FechaEgresoQaLocal)">@FechaCorta(item.FechaEgresoQaLocal)</td>
+                                    <td title="@item.ResultadoQa">@item.ResultadoQa</td>
+                                    <td class="informe-sep" title="@item.PreAprobo">@item.PreAprobo</td>
+                                    <td title="@item.PreAproboIyc">@item.PreAproboIyc</td>
+                                    <td title="@FechaLarga(item.FechaImplementadoLocal)">@FechaCorta(item.FechaImplementadoLocal)</td>
+                                    <td title="@item.UltimoStageImplementado">@item.UltimoStageImplementado</td>
+                                    <td class="informe-sep" title="@item.ObjetosArchivos">@item.ObjetosArchivos</td>
+                                </tr>
+                            }
+                        </tbody>
+                    }
+                    else
+                    {
+                        <tbody>
+                            <tr>
+                                <td colspan="16" class="text-center text-muted">No hay envíos para los filtros seleccionados</td>
+                            </tr>
+                        </tbody>
+                    }
+                </table>
+
+                @if (Model.Filas.Any())
+                {
+                    @Html.PagedListPager(Model.Filas, p => Url.Action("Releases", "InformesGerenciales", Query(page: p)), new PagedListRenderOptions
+                    {
+                        LiElementClasses = new[] { "page-item" },
+                        PageClasses = new[] { "page-link" },
+                        ActiveLiElementClass = "active",
+                        UlElementClasses = new List<string> { "pagination pg-primary" }
+                    })
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="filtrosOffcanvas" aria-labelledby="filtrosOffcanvasLabel">
+        <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="filtrosOffcanvasLabel">Filtros</h5>
+            <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+        </div>
+        <div class="offcanvas-body">
+            <h6 class="filtros-seccion span-2">Período</h6>
+            <div class="form-group-default">
+                <label for="fechaDesde">Desde</label>
+                <input type="date" name="fechaDesde" id="fechaDesde" class="form-control"
+                       value="@Model.FechaDesde?.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="form-group-default">
+                <label for="fechaHasta">Hasta</label>
+                <input type="date" name="fechaHasta" id="fechaHasta" class="form-control"
+                       value="@Model.FechaHasta?.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="form-group-default">
+                <label for="fechaImplementadoDesde">Impl. desde</label>
+                <input type="date" name="fechaImplementadoDesde" id="fechaImplementadoDesde" class="form-control"
+                       value="@Model.FechaImplementadoDesde?.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="form-group-default">
+                <label for="fechaImplementadoHasta">Impl. hasta</label>
+                <input type="date" name="fechaImplementadoHasta" id="fechaImplementadoHasta" class="form-control"
+                       value="@Model.FechaImplementadoHasta?.ToString("yyyy-MM-dd")" />
+            </div>
+            <h6 class="filtros-seccion span-2">Criterios</h6>
+            <div class="form-group-default">
+                <label for="repoKey">Aplicativo</label>
+                <select name="repoKey" id="repoKey" class="form-control">
+                    <option value="">Todos</option>
+                    @foreach (var app in Model.Aplicativos)
+                    {
+                        <option value="@app.DisplayName" selected="@(string.Equals(app.DisplayName, Model.RepoKey, StringComparison.OrdinalIgnoreCase))">@app.DisplayName</option>
+                    }
+                </select>
+            </div>
+            <div class="form-group-default">
+                <label for="tipo">Tipo</label>
+                <select name="tipo" id="tipo" class="form-control">
+                    <option value="">Todos</option>
+                    <option value="@TipoEnvioInforme.Script" selected="@(Model.Tipo == TipoEnvioInforme.Script)">Script</option>
+                    <option value="@TipoEnvioInforme.Gx" selected="@(Model.Tipo == TipoEnvioInforme.Gx)">GX</option>
+                    <option value="@TipoEnvioInforme.Dlya" selected="@(Model.Tipo == TipoEnvioInforme.Dlya)">DLYA</option>
+                </select>
+            </div>
+            <div class="form-group-default">
+                <label for="hotfix">Hotfix</label>
+                <select name="hotfix" id="hotfix" class="form-control">
+                    <option value="">Todos</option>
+                    <option value="true" selected="@(Model.Hotfix == true)">Sí</option>
+                    <option value="false" selected="@(Model.Hotfix == false)">No</option>
+                </select>
+            </div>
+            <div class="form-group-default">
+                <label for="tipoReferencia">Tipo de referencia</label>
+                <select name="tipoReferencia" id="tipoReferencia" class="form-control">
+                    <option value="">Todos</option>
+                    @foreach (var tipoRef in Model.TiposReferencia)
+                    {
+                        <option value="@tipoRef" selected="@(string.Equals(tipoRef, Model.TipoReferencia, StringComparison.OrdinalIgnoreCase))">@tipoRef</option>
+                    }
+                </select>
+            </div>
+            <div class="form-group-default">
+                <label for="nroIncidente">Nro. referencia</label>
+                <input type="number" name="nroIncidente" id="nroIncidente" min="1" class="form-control"
+                       placeholder="Nro"
+                       value="@(Model.NroIncidente is > 0 ? Model.NroIncidente.ToString() : null)" />
+            </div>
+            <div class="form-group-default form-group-default--usuario span-2">
+                <label for="usuario">Usuario</label>
+                <div class="input-icon">
+                    <span class="input-icon-addon">
+                        <i class="fa fa-user"></i>
+                    </span>
+                    <input type="text" name="usuario" id="usuario" class="form-control"
+                           placeholder="Usuario AD" value="@Model.Usuario" autocomplete="off" />
+                    <div id="sugerencias" class="dropdown-menu w-100"></div>
+                </div>
+            </div>
+            <div class="form-group-default span-2">
+                <label for="ultimoStage">Último stage</label>
+                <select name="ultimoStage" id="ultimoStage" class="form-control">
+                    <option value="">Todos</option>
+                    <option value="@InformeGerencialReleasesService.FiltroSinRelease"
+                            selected="@(Model.UltimoStage == InformeGerencialReleasesService.FiltroSinRelease)">
+                        Sin release
+                    </option>
+                    @foreach (var stage in Model.Stages)
+                    {
+                        <option value="@stage.Key" selected="@(string.Equals(stage.Key, Model.UltimoStage, StringComparison.OrdinalIgnoreCase))">@stage.Display</option>
+                    }
+                </select>
+            </div>
+
+            <h6 class="filtros-seccion span-2">Gráficos</h6>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="chkGraficoHotfix"
+                       @(Model.MostrarGraficoHotfix ? "checked" : null) />
+                <label class="form-check-label" for="chkGraficoHotfix">Hotfix</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="chkGraficoDestino"
+                       @(Model.MostrarGraficoDestino ? "checked" : null) />
+                <label class="form-check-label" for="chkGraficoDestino">Destino</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="chkGraficoPruebaAcotada"
+                       @(Model.MostrarGraficoPruebaAcotada ? "checked" : null) />
+                <label class="form-check-label" for="chkGraficoPruebaAcotada">Prueba acotada</label>
+            </div>
+        </div>
+        <div class="offcanvas-footer border-top p-3 d-flex gap-2">
+            <button type="submit" class="btn btn-primary flex-fill" id="btnBuscar" title="Aplicar filtros">
+                <i class="fas fa-search me-1"></i> Aplicar
+            </button>
+            <button type="button" class="btn btn-light flex-fill" data-bs-dismiss="offcanvas">Cerrar</button>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+    <script src="~/js/InformeGerencialReleases.js" asp-append-version="true"></script>
+}

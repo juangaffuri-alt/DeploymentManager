@@ -1,0 +1,335 @@
+﻿@model PasadorScript.ViewModels.BuildTimelineViewModel
+
+<script>
+
+    
+</script>
+
+<div id="azureLogsModalContainer">
+    <div class="modal fade" id="azureLogsModal" tabindex="-1" aria-labelledby="azureLogsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content" style="height: 85vh;">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title d-flex align-items-center" id="azureLogsModalLabel">
+                        <i class="fas fa-list-alt me-2"></i>
+                        Logs - Build @Model.BuildId
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body p-0" style="height: calc(85vh - 60px);">
+                    <div class="d-flex h-100">
+                        <!-- Panel izquierdo: Lista de tareas -->
+                        <div class="task-panel" style="width: 380px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-right: 2px solid #dee2e6; overflow-y: auto; box-shadow: 2px 0 10px rgba(0,0,0,0.05);">
+                            <div class="panel-header p-3 border-bottom" style="background: linear-gradient(135deg, #ffffff 0%, #f1f3f4 100%); box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <strong class="text-dark d-flex align-items-center">
+                                        <i class="fas fa-tasks me-2 text-primary"></i>
+                                        TAREAS
+                                    </strong>
+                                    <span class="badge bg-primary rounded-pill">
+                                        @(Model.Tasks?.Count() ?? 0)
+                                    </span>
+                                </div>
+                            </div>
+                            <div id="azTaskList" class="p-2">
+                                @if (Model.Tasks != null && Model.Tasks.Any())
+                                {
+                                    foreach (var t in Model.Tasks)
+                                    {
+                                        var hasLog = t.LogId.HasValue && t.LogId.Value > 0;
+                                        var itemClass = hasLog ? "task-item-clickable" : "task-item-disabled";
+                                        var statusIcon = t.Result == "succeeded" ? "fas fa-check-circle" : 
+                                                        t.Result == "failed" ? "fas fa-times-circle" : 
+                                                        "fas fa-question-circle";
+                                        var statusColor = t.Result == "succeeded" ? "text-success" : 
+                                                         t.Result == "failed" ? "text-danger" : 
+                                                         "text-secondary";
+
+                                        <div class="@itemClass task-item mb-2"
+                                             data-buildid="@Model.BuildId"
+                                             data-logid="@(hasLog ? t.LogId.Value.ToString() : "")"
+                                             data-taskid="@t.Id"
+                                             data-taskname="@t.Name"
+                                             data-projectType="@Model.AzureProjectType"
+                                             data-haslog="@hasLog.ToString().ToLower()"
+                                             onclick="@(hasLog ? $"window.AzureLogsModal.loadTaskLog({Model.BuildId}, {t.LogId.Value}, '{t.Name.Replace("'", "\\'")}', '{Model.AzureProjectType}', this)" : "")"
+                                             style="@(hasLog ? "cursor: pointer;" : "cursor: not-allowed;")">
+
+                                            <div class="task-card p-3 rounded shadow-sm" style="background: white; border-left: 4px solid @(t.Result == "succeeded" ? "#28a745" : t.Result == "failed" ? "#dc3545" : "#6c757d"); transition: all 0.2s ease;">
+                                                
+                                                <!-- Nombre de la tarea -->
+                                                <div class="task-header d-flex align-items-start justify-content-between mb-2">
+                                                    <div class="task-name flex-grow-1" style="font-weight: 600; font-size: 14px; line-height: 1.3; color: #2c3e50;" title="@t.Name">
+                                                        @t.Name
+                                                    </div>
+                                                    <i class="@statusIcon @statusColor ms-2" style="font-size: 16px; flex-shrink: 0;"></i>
+                                                </div>
+
+                                                <!-- Información de estado -->
+                                                <div class="task-meta d-flex flex-wrap align-items-center gap-2 mb-2">
+                                                    @if (!string.IsNullOrEmpty(t.Result))
+                                                    {
+                                                        var badgeClass = t.Result == "succeeded" ? "bg-success" :
+                                                        t.Result == "failed" ? "bg-danger" : "bg-secondary";
+                                                        <span class="badge @badgeClass text-uppercase" style="font-size: 10px; letter-spacing: 0.5px;">@t.Result</span>
+                                                    }
+                                                    @if (!string.IsNullOrEmpty(t.State))
+                                                    {
+                                                        <span class="badge bg-light text-dark border" style="font-size: 10px;">@t.State</span>
+                                                    }
+                                                </div>
+
+                                                <!-- Footer con información adicional -->
+                                                <div class="task-footer d-flex justify-content-between align-items-center" style="font-size: 11px;">
+                                                    <div class="d-flex align-items-center text-muted">
+                                                        <i class="fas fa-cog me-1"></i>
+                                                        <span>@t.Type</span>
+                                                    </div>
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        @if (!string.IsNullOrEmpty(t.StartTime?.ToString("HH:mm:ss")))
+                                                        {
+                                                            <div class="d-flex align-items-center text-muted">
+                                                                <i class="fas fa-clock me-1"></i>
+                                                                <span>@t.StartTime?.ToString("HH:mm:ss")</span>
+                                                            </div>
+                                                        }
+                                                        @if (hasLog)
+                                                        {
+                                                            <span class="badge bg-primary" style="font-size: 9px;">
+                                                                <i class="fas fa-file-alt me-1"></i>LOG
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge bg-secondary" style="font-size: 9px; opacity: 0.7;">
+                                                                <i class="fas fa-ban me-1"></i>SIN LOG
+                                                            </span>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                                else
+                                {
+                                    <div class="empty-state p-4 text-center">
+                                        <div class="mb-3">
+                                            <i class="fas fa-inbox text-muted" style="font-size: 48px; opacity: 0.3;"></i>
+                                        </div>
+                                        <p class="text-muted mb-0">No se encontraron tareas en el timeline.</p>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Panel derecho: Contenido del log -->
+                        <div class="flex-grow-1 d-flex flex-column" style="min-width: 0;">
+                            <div class="log-header p-3 border-bottom d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-file-code me-2 text-primary"></i>
+                                    <strong id="azSelectedTaskName" class="text-primary">Seleccione una tarea</strong>
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-info-circle me-1 text-muted"></i>
+                                    <small id="azLogInfo" class="text-muted"></small>
+                                </div>
+                            </div>
+                            <div class="flex-grow-1 position-relative" style="overflow: hidden; background: #f8f9fa;">
+                                <div id="editor" style="height: 100%; width: 100%; overflow: auto; background: #1e1e1e; position: relative;">
+                                    <div class="loading-placeholder d-flex flex-column align-items-center justify-content-center h-100 text-muted">
+                                        <i class="fas fa-code" style="font-size: 48px; opacity: 0.3; margin-bottom: 15px;"></i>
+                                        <p class="mb-0">Seleccione una tarea de la lista para ver su log</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* Mejoras para el panel de tareas */
+        .task-panel {
+            position: relative;
+        }
+
+        .task-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .task-panel::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .task-panel::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
+        .task-panel::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        /* Efectos hover y active para las tareas */
+        .task-item-clickable .task-card {
+            border: 1px solid #e9ecef;
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .task-item-clickable:hover .task-card {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
+            border-color: #007bff;
+        }
+
+        .task-item-clickable.active .task-card {
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
+            color: white !important;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(0,123,255,0.3) !important;
+            border-color: #0056b3;
+        }
+
+        .task-item-clickable.active .task-name,
+        .task-item-clickable.active .text-muted,
+        .task-item-clickable.active .text-dark {
+            color: white !important;
+        }
+
+        .task-item-clickable.active .badge {
+            background-color: rgba(255, 255, 255, 0.2) !important;
+            color: white !important;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .task-item-clickable.active .fas {
+            color: white !important;
+        }
+
+        /* Tareas deshabilitadas */
+        .task-item-disabled {
+            opacity: 0.6;
+        }
+
+        .task-item-disabled .task-card {
+            background: #f8f9fa;
+            border: 1px dashed #dee2e6;
+            color: #6c757d;
+        }
+
+        /* Animaciones */
+        .task-card {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Mejoras en badges */
+        .badge {
+            font-weight: 500;
+            padding: 4px 8px;
+        }
+
+        /* Estado vacío mejorado */
+        .empty-state {
+            background: white;
+            border-radius: 8px;
+            margin: 10px;
+            border: 2px dashed #dee2e6;
+        }
+
+        /* Header del log mejorado */
+        .log-header {
+            border-bottom: 2px solid #e9ecef !important;
+        }
+
+        /* Placeholder de loading */
+        .loading-placeholder {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: #bdc3c7;
+        }
+
+        /* Iconos con mejor espaciado */
+        .fas {
+            width: 14px;
+            text-align: center;
+        }
+
+        /* Responsive adjustments */
+        @@media (max-width: 768px) {
+            .task-panel {
+                width: 100% !important;
+                max-width: 300px;
+            }
+            
+            .task-card {
+                margin-bottom: 8px;
+            }
+        }
+
+        /* Mejoras en la tipografía */
+        .task-name {
+            word-break: break-word;
+            hyphens: auto;
+        }
+
+        .task-footer {
+            border-top: 1px solid rgba(0,0,0,0.05);
+            padding-top: 8px;
+            margin-top: 8px;
+        }
+
+        /* Hover effects para badges */
+        .task-item-clickable:hover .badge {
+            transform: scale(1.05);
+        }
+
+        /* Mejor contraste para texto */
+        .text-muted {
+            color: #6c757d !important;
+        }
+
+        /* Scroll suave */
+        .task-panel {
+            scroll-behavior: smooth;
+        }
+
+        /* Estados de carga */
+        .task-card.loading {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @@keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        /* Mejoras en el spacing */
+        .task-meta .badge {
+            margin-right: 4px;
+        }
+
+        .task-meta .badge:last-child {
+            margin-right: 0;
+        }
+
+        /* Indicador visual para tareas activas */
+        .task-item-clickable.active::before {
+            content: '';
+            position: absolute;
+            left: -2px;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: #ffc107;
+            border-radius: 0 2px 2px 0;
+        }
+
+        .task-item {
+            position: relative;
+        }
+    </style>
+</div>

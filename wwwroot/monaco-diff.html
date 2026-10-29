@@ -1,0 +1,255 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monaco Diff Editor</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        #container {
+            width: 100%;
+            height: 100vh;
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #0d6efd;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .error {
+            color: #dc3545;
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p style="margin-top: 1rem;">Cargando Monaco Editor...</p>
+        </div>
+    </div>
+
+    <!-- Monaco Editor -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs/loader.min.js"></script>
+
+    <script>
+        console.log('Monaco HTML loaded');
+
+        let editor = null;
+        let currentViewMode = 'split';
+        let showLineNumbers = true;
+        let originalContent = '';
+        let modifiedContent = '';
+        let language = 'plaintext';
+
+        // Obtener parámetros de la URL
+        function getUrlParams() {
+            const params = new URLSearchParams(window.location.search);
+            return {
+                original: decodeURIComponent(params.get('original') || ''),
+                modified: decodeURIComponent(params.get('modified') || ''),
+                language: params.get('language') || 'plaintext',
+                fileName: params.get('fileName') || 'file',
+                initialViewMode: params.get('initialViewMode') || 'split' // ← OBTENER EL MODO INICIAL
+            };
+        }
+
+        // Configurar Monaco
+        require.config({
+            paths: {
+                'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs'
+            }
+        });
+
+        require(['vs/editor/editor.main'], function() {
+            console.log('Monaco modules loaded');
+            initializeEditor();
+            
+        });
+
+        function initializeEditor() {
+            try {
+                const params = getUrlParams();
+                originalContent = params.original;
+                modifiedContent = params.modified;
+                language = params.language;
+                currentViewMode = params.initialViewMode; // ← USAR EL MODO INICIAL
+
+                console.log('Initializing Monaco with:', {
+                    originalLength: originalContent.length,
+                    modifiedLength: modifiedContent.length,
+                    language: language
+                });
+
+                const container = document.getElementById('container');
+                const loading = document.getElementById('loading');
+
+                // Crear el editor diff
+                editor = monaco.editor.createDiffEditor(container, {
+                    theme: 'vs',
+                    language: language,
+                    automaticLayout: true,
+                    renderSideBySide: currentViewMode === 'split',
+                    lineNumbers: showLineNumbers ? 'on' : 'off',
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    wordWrap: 'on',
+                    diffWordWrap: 'on'
+                });
+
+                // Configurar el modelo
+                const originalModel = monaco.editor.createModel(originalContent, language);
+                const modifiedModel = monaco.editor.createModel(modifiedContent, language);
+
+                editor.setModel({
+                    original: originalModel,
+                    modified: modifiedModel
+                });
+
+                // Ocultar loading
+                loading.style.display = 'none';
+
+                console.log('Monaco editor initialized successfully');
+
+                // Notificar que está listo
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'monacoReady',
+                        initialViewMode: currentViewMode
+                    }, '*');
+                }
+
+                // Configurar listener para redimensionamiento
+                window.addEventListener('resize', () => {
+                    if (editor) {
+                        editor.layout();
+                    }
+                });
+
+            } catch (error) {
+                console.error('Error initializing Monaco:', error);
+                document.getElementById('loading').innerHTML =
+                    '<div class="error"><p>Error al cargar Monaco Editor</p><p>' + error.message + '</p></div>';
+            }
+        }
+
+        // Listener para mensajes del iframe padre
+        window.addEventListener('message', function(event) {
+            console.log('Monaco received message:', event.data);
+
+            if (!editor) {
+                console.warn('Editor not ready, ignoring message');
+                return;
+            }
+
+            try {
+                switch (event.data.type) {
+                    case 'changeViewMode':
+                        currentViewMode = event.data.mode;
+                        console.log('Changing view mode to:', currentViewMode);
+                        editor.updateOptions({
+                            renderSideBySide: currentViewMode === 'split'
+                        });
+                        break;
+
+                    case 'toggleLineNumbers':
+                        showLineNumbers = event.data.show;
+                        console.log('Toggling line numbers:', showLineNumbers);
+                        editor.updateOptions({
+                            lineNumbers: showLineNumbers ? 'on' : 'off'
+                        });
+                        break;
+
+                    case 'goToNextDiff':
+                        console.log('Going to next diff');
+                        editor.getAction('editor.action.diffReview.next').run();
+                        break;
+
+                    case 'goToPrevDiff':
+                        console.log('Going to previous diff');
+                        editor.getAction('editor.action.diffReview.prev').run();
+                        break;
+
+                    case 'editorData':
+                        // Actualizar contenido si es necesario
+                        if (event.data.originalContent !== originalContent ||
+                            event.data.modifiedContent !== modifiedContent) {
+
+                            originalContent = event.data.originalContent || '';
+                            modifiedContent = event.data.modifiedContent || '';
+                            language = event.data.language || 'plaintext';
+
+                            console.log('Updating editor content');
+
+                            const originalModel = monaco.editor.createModel(originalContent, language);
+                            const modifiedModel = monaco.editor.createModel(modifiedContent, language);
+
+                            editor.setModel({
+                                original: originalModel,
+                                modified: modifiedModel
+                            });
+                        }
+                        break;
+
+                    case 'debugTest':
+                        console.log('Debug test received in Monaco');
+                        if (window.parent && window.parent !== window) {
+                            window.parent.postMessage({
+                                type: 'debugTestResponse',
+                                message: 'Monaco is responding correctly!',
+                                editorReady: !!editor,
+                                viewMode: currentViewMode,
+                                lineNumbers: showLineNumbers
+                            }, '*');
+                        }
+                        break;
+
+                    default:
+                        console.log('Unknown message type:', event.data.type);
+                }
+            } catch (error) {
+                console.error('Error processing message:', error);
+            }
+        });
+
+        // Solicitar datos iniciales si es necesario
+        setTimeout(() => {
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'requestData'
+                }, '*');
+            }
+        }, 500);
+    </script>
+</body>
+</html>

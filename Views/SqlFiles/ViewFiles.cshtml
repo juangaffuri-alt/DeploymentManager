@@ -1,0 +1,198 @@
+﻿@model PasadorScript.ViewModels.ContentFileView
+@using PasadorScript.Helpers
+@using System.Web
+@using System.Text.Encodings.Web
+
+@section Styles {
+    <!-- CSS del tema (Prism para resaltado SQL) -->
+    <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-sql.min.js"></script>
+
+    <style>
+        /* Adaptaciones visuales */
+        .file-list-card .nav-pills .nav-link {
+            white-space: nowrap;
+        }
+
+        .monaco-trigger {
+            display: inline-flex;
+            gap: .5rem;
+            align-items: center;
+        }
+
+        .pr-badges .badge {
+            margin-right: .35rem;
+        }
+    </style>
+}
+
+@Html.DiffModal() <!-- modal compartido para ver diffs -->
+
+<form asp-action="Vote" asp-controller="SqlFiles" method="post" id="vote-form">
+    @Html.AntiForgeryToken()
+
+    <input type="hidden" asp-for="IdScript" value="@Model.IdScript" />
+    <input type="hidden" asp-for="BranchNameDesa" value="@Model.BranchNameDesa" />
+    <input type="hidden" asp-for="BranchNameQA" value="@Model.BranchNameQA" />
+    <input type="hidden" asp-for="BranchNamePR" value="@Model.BranchNamePR" />
+    <input type="hidden" asp-for="RepositoryId" value="@Model.RepositoryId" />
+    <input type="hidden" asp-for="PullRequestIdPR" value="@Model.PullRequestIdPR" />
+    <input type="hidden" asp-for="PullRequestIdQA" value="@Model.PullRequestIdQA" />
+    <input type="hidden" asp-for="RepositoryId" value="@Model.RepositoryId" />
+    <input type="hidden" asp-for="AzureProjectType" />
+
+    <div class="container-fluid">
+
+        <partial name="_PullRequestInfo" model="Model.ToExtendViewModel()" />
+
+        <partial name="_TablaTareas" model='new PasadorScript.ViewModels.TablaTareasPartialModel { TareasJson = Model.TareasJson, Editable = false, InputName = "TareasJson" }' />
+
+        <!-- Segunda fila: listado de archivos (a lo ancho, como en GxDeploy) -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card file-list-card mb-4">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0"><i class="fas fa-folder-open me-2"></i> Archivos / Scripts</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="nav nav-pills nav-secondary nav-pills-no-bd nav-pills-icons mb-3" id="pills-tab-with-icon" role="tablist">
+                            @{
+                                var selected = "true";
+                                var classActive = "show active";
+                                var fname = "";
+                                var active = "active";
+                            }
+                            @foreach (var f in Model.Files)
+                            {
+                                if (!f.FileName.Contains("execution_order.txt"))
+                                {
+                                    fname = System.IO.Path.GetFileName(f.FileName.Replace("/", "\\"));
+                                    <li class="nav-item" role="presentation">
+                                        <a class="nav-link @active" id="pills-@fname-tab" data-bs-toggle="pill" href="#file-@fname" role="tab" aria-controls="pills-@fname" aria-selected="@selected">
+                                            <i class="fa fa-file-code"></i> @fname
+                                        </a>
+                                    </li>
+                                    selected = "false";
+                                    active = "";
+                                }
+                            }
+                        </ul>
+
+                        <div class="tab-content" id="pills-tabContent">
+                            @{
+                                classActive = "show active";
+                            }
+                            @foreach (var f in Model.Files)
+                            {
+                                var fnameLocal = System.IO.Path.GetFileName(f.FileName.Replace("/", "\\"));
+                                <div class="tab-pane fade @classActive" id="file-@fnameLocal" role="tabpanel" aria-labelledby="pills-@fnameLocal-tab">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <div>
+                                            <span class="badge badge-count"><i class="far fa-file-code me-2"></i>@f.ParsedStructure.Type</span>
+                                            @if (!String.IsNullOrEmpty(f.ParsedStructure.Name))
+                                            {
+                                                <span class="badge badge-primary ms-2"><i class="fas fa-info me-2"></i>Schema: @f.ParsedStructure.Schema | Nombre: @f.ParsedStructure.Name</span>
+                                            }
+                                        </div>
+
+                                        <div class="monaco-trigger">
+                                            <button type="button" class="btn btn-sm btn-outline-primary me-2 btn-copy"
+                                                    data-copy-content="@Html.Raw(HtmlEncoder.Default.Encode(f.Content)).ToString().Replace("&quot;", "&quot;")"
+                                                    title="Copiar código al portapapeles">
+                                                <i class="far fa-copy"></i> Copiar
+                                            </button>
+
+                                            @Html.DiffModalButton(Model.PullRequestIdQA!.Value, f.FileName, f.Content, "Ver diferencias")
+                                        </div>
+                                    </div>
+
+                                    <pre style="max-height:60vh; overflow-y:auto" class="language-sql" tabindex="0"><code class="language-sql">@Html.Raw(HtmlEncoder.Default.Encode(f.Content))</code></pre>
+                                </div>
+                                classActive = "";
+                            }
+                        </div>
+                    </div>
+                    <div class="card-action p-3">
+                        <a class="btn btn-secondary" href="@ViewBag.ReturnUrl">Volver</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <input type="hidden" asp-for="Vote" id="Vote" />
+    <input type="hidden" asp-for="Comment" id="Comment" />
+</form>
+
+@section Scripts {
+    <script src="~/js/tabla-tareas.js" asp-append-version="true"></script>
+    <script>
+        $(document).ready(function () {
+            // Copiar contenido al portapapeles
+            $(document).on('click', '.btn-copy', async function (event) {
+                event.preventDefault();
+                const encodedContent = $(this).data('copy-content') || $(this).attr('data-copy-content');
+                const content = $('<textarea/>').html(encodedContent).text();
+                try {
+                    if (navigator.clipboard && window.isSecureContext) {
+                        await navigator.clipboard.writeText(content);
+                    } else {
+                        const textArea = document.createElement('textarea');
+                        textArea.value = content;
+                        textArea.style.position = 'fixed';
+                        textArea.style.left = '-999999px';
+                        textArea.style.top = '-999999px';
+                        document.body.appendChild(textArea);
+                        textArea.select();
+                        try { document.execCommand('copy'); } finally { document.body.removeChild(textArea); }
+                    }
+                    $.notify({ title: 'Copiado', message: 'El código se ha copiado al portapapeles correctamente', icon: 'fa fa-check' }, { type: 'success', placement: { from: 'top', align: 'right' }, delay: 3000 });
+                } catch (err) {
+                    console.error('Error al copiar:', err);
+                    $.notify({ title: 'Error', message: 'No se pudo copiar el código. Intente manualmente.', icon: 'fa fa-exclamation-triangle' }, { type: 'danger', placement: { from: 'top', align: 'right' }, delay: 3000 });
+                }
+            });
+
+            // Botones de voto (mismo comportamiento)
+            $(".btn-approve").click(function (e) {
+                e.preventDefault();
+                $("#Vote").val($(this).data("vote"));
+                $("#Comment").val("");
+                $("#vote-form").submit();
+            });
+
+            $(".btn-approve-with-suggestions, .btn-reject").click(function (e) {
+                e.preventDefault();
+                const vote = $(this).data("vote");
+                const actionText = vote == 5 ? "Aprobar con sugerencias" : "Rechazar";
+
+                Swal.fire({
+                    title: actionText,
+                    input: 'text',
+                    inputPlaceholder: 'Ingrese un motivo',
+                    inputAttributes: { id: 'input-field', class: 'form-control' },
+                    showCancelButton: true,
+                    confirmButtonText: 'Confirmar',
+                    cancelButtonText: 'Cancelar',
+                    customClass: { confirmButton: 'btn btn-success', cancelButton: 'btn btn-danger' },
+                    buttonsStyling: false,
+                    preConfirm: (inputValue) => {
+                        if (!inputValue || inputValue.trim() === '') {
+                            Swal.showValidationMessage('El motivo es obligatorio.');
+                            return false;
+                        }
+                        return inputValue.trim();
+                    }
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        $("#Vote").val(vote);
+                        $("#Comment").val(result.value);
+                        $("#vote-form").submit();
+                    }
+                });
+            });
+        });
+    </script>
+}

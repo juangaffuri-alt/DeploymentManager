@@ -1,0 +1,40 @@
+﻿@*
+    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+*@
+@{
+}
+<div class="d-flex align-items-left align-items-md-center flex-column flex-md-row pt-2 pb-4">
+    <div>
+        <h3 class="fw-bold mb-3">Release no encontrada</h3>
+    </div>
+</div>
+<div class="row">
+    <div class="col-3">
+        <img src="~/assets/img/zerodata-release-management-new.png" style="height:160px" />
+    </div>
+    <div class="col-3">
+        Puede que aún no haya finalizado el build correspondiente o la definición de la release contenga errores.
+        <br /><br />
+        <div id="refresh-msg" class="text-muted">
+            Reintentando en <span id="refresh-counter">10</span> segundos...
+        </div>
+    </div>
+</div>
+@section Scripts{
+    <script>
+        (function () {
+            let seconds = 10;
+            const counter = document.getElementById("refresh-counter");
+
+            const interval = setInterval(() => {
+                seconds--;
+                counter.textContent = seconds;
+
+                if (seconds <= 0) {
+                    clearInterval(interval);
+                    location.reload(); // refresca la página
+                }
+            }, 1000);
+        })();
+    </script>
+}

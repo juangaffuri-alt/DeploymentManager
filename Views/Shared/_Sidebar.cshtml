@@ -1,0 +1,145 @@
+﻿@inject PasadorScript.Services.MenuApp.IServiciosMenu _serviciosMenu
+
+@* 1. Helper local que dice si la entrada coincide con la vista actual *@
+@functions {
+    bool EsActivo(string controller, string action)
+    {
+        var rd = ViewContext.RouteData.Values;
+        var actualController = rd["controller"]?.ToString();
+        var actualAction = rd["action"]?.ToString();
+
+        // Separar acción y query string del objetivo
+        var actionParts = action?.Split('?') ?? new[] { action };
+        var actionName = actionParts[0];
+
+        // Verificar controller y action base
+        if (!string.Equals(controller, actualController, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(actionName, actualAction, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // Si el objetivo NO tiene query params definidos → SIEMPRE es true
+        if (actionParts.Length == 1 || string.IsNullOrEmpty(actionParts[1]))
+        {
+            return true;
+        }
+
+        // Si el objetivo SÍ tiene query params definidos
+        var targetParams = actionParts[1].Split('&', StringSplitOptions.RemoveEmptyEntries);
+        var currentQuery = ViewContext.HttpContext.Request.Query;
+
+        // Verificar que CADA parámetro definido en el objetivo exista y coincida
+        foreach (var param in targetParams)
+        {
+            var keyValue = param.Split('=');
+            if (keyValue.Length != 2)
+                continue;
+
+            var paramName = keyValue[0];
+            var expectedValue = keyValue[1];
+            var actualValue = currentQuery[paramName].ToString();
+
+            // Si algún parámetro requerido no existe o no coincide → false
+            if (!currentQuery.ContainsKey(paramName) ||
+                !string.Equals(actualValue, expectedValue, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        // Todos los parámetros requeridos existen y coinciden
+        return true;
+    }
+}
+
+<div class="sidebar" data-background-color="dark">
+    <div class="sidebar-logo">
+        <!-- Logo Header -->
+        <div class="logo-header" data-background-color="dark">
+            <a asp-action="index" asp-controller="Home" class="logo">
+                <img src="~/assets/img/bpn/logo_horizontal.png"
+                     alt="navbar brand"
+                     class="navbar-brand"
+                     height="50" />
+            </a>
+            <div class="nav-toggle">
+                <button class="btn btn-toggle toggle-sidebar">
+                    <i class="gg-menu-right"></i>
+                </button>
+                <button class="btn btn-toggle sidenav-toggler">
+                    <i class="gg-menu-left"></i>
+                </button>
+            </div>
+            <button class="topbar-toggler more">
+                <i class="gg-more-vertical-alt"></i>
+            </button>
+        </div>
+        <!-- End Logo Header -->
+    </div>
+    <div class="sidebar-wrapper scrollbar scrollbar-inner">
+        <div class="sidebar-content">
+            <ul class="nav nav-secondary">
+
+                @if (User.Identity?.IsAuthenticated ?? true)
+                {
+
+
+                    var menu = await _serviciosMenu.GetMenu();
+                    foreach (var m in menu)
+                    {
+                        /*===== MENÚ CON SUBMENÚ =====*/
+                        if (m.Submenues.Any())
+                        {
+                            var submenuActivo = m.Submenues.Any(sm => EsActivo(sm.AspController, sm.AspAction));
+
+                            <li class="nav-item @(submenuActivo ? "active" : "")">
+                                <a data-bs-toggle="collapse"
+                                   href="#@m.IdMenu"
+                                   aria-expanded="@(submenuActivo.ToString().ToLower())">
+                                    <i class="@m.IClass"></i>
+                                    <p>@m.Descripcion</p>
+                                    <span class="caret"></span>
+                                </a>
+
+                                <div class="collapse @(submenuActivo ? "show" : "")" id="@m.IdMenu">
+                                    <ul class="nav nav-collapse">
+                                        @foreach (var sm in m.Submenues)
+                                        {
+                                            <li class="@(EsActivo(sm.AspController, sm.AspAction) ? "active" : "")">
+                                                @{
+                                                    var urlParts = sm.AspAction.Split('?');
+                                                    var action = urlParts[0];
+                                                    var queryString = urlParts.Length > 1 ? urlParts[1] : "";
+
+                                                    // Parsear los parámetros manualmente o usar la siguiente aproximación
+                                                }
+
+                                                <a asp-action="@action"
+                                                   asp-controller="@sm.AspController"
+                                                   asp-all-route-data="@PasadorScript.Helpers.UrlRouteData.GetRouteData(sm.AspAction)">
+                                                    <span class="sub-item">@sm.Descripcion</span>
+                                                </a>
+                                            </li>
+                                        }
+                                    </ul>
+                                </div>
+                            </li>
+                        }
+                        /*===== MENÚ SIN SUBMENÚ =====*/
+                        else
+                        {
+                            <li class="nav-item @(EsActivo(m.AspController, m.AspAction) ? "active" : "")">
+                                <a asp-action="@m.AspAction" asp-controller="@m.AspController">
+                                    <i class="@m.IClass"></i>
+                                    <p>@m.Descripcion</p>
+                                </a>
+                            </li>
+                        }
+                    }
+
+                }
+            </ul>
+        </div>
+    </div>
+</div>

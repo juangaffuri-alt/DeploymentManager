@@ -1,0 +1,537 @@
+﻿@using System.Text.Encodings.Web
+@inject PasadorScript.Services.AdGroups.IAdGroupService _serviciosSugus
+@model PasadorScript.DTO.AzureDev.ReleaseDto
+@{
+    ViewData["Title"] = "Release";
+    var log = await _serviciosSugus.GetInfoUser();
+    var forGx = Model.ForGenexus ? "S" : "N";
+}
+
+<div class="d-flex align-items-left align-items-md-center flex-column flex-md-row pt-2 pb-4">
+    <div>
+        <h3 class="fw-bold mb-3">Release @Model.Name</h3>
+        <h6 class="op-7 mb-2">Entornos (stages)</h6>
+    </div>
+</div>
+@{
+    var alertStatus = new List<string>() { "pending", "inProgress" };
+    var logueableStatus = new List<string>() { "succeeded", "failed", "canceled", "rejected" };
+    var pendientes = Model.Environments
+    .Where(e => alertStatus.Contains(e.Status))
+    .Select(e => e.Name)
+    .ToList();
+
+    if (pendientes.Any())
+    {
+        <div class="row">
+            <div class="col-12">
+                <div class="alert alert-info d-flex align-items-center gap-2" role="alert">
+                    <i class="fa fa-info-circle fa-lg text-primary"></i>
+                    <span>
+                        Pendiente de aprobación en
+                        <strong>@string.Join(", ", pendientes)</strong> stage@(pendientes.Count > 1 ? "s" : "").
+                    </span>
+                </div>
+            </div>
+        </div>
+    }
+}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Actualización de stages (deployment)</h4>
+            </div>
+            <div class="card-body">
+
+                <div class="d-flex flex-wrap gap-4 justify-content-start">
+
+                    @foreach (var env in Model.Environments)
+                    {
+                        <div class="d-flex flex-column align-items-center">
+                            <div class="d-flex gap-3 align-items-start shadow rounded-3 px-4 py-3">
+
+                                <!-- Pre-Approvals -->
+                                <div class="d-flex flex-column align-items-center ">
+
+                                    @foreach (var defined in env.PreApprovedDefinition)
+                                    {
+                                        var actual = env.PreDeployApprovals.FirstOrDefault(a => a.Approver.Id == defined.Approver.Id);
+                                        var displayName = $"{defined.Approver.DisplayName}";
+                                        var avatarUrl = actual?.ApprovedBy?.ImageUrl ?? defined.Approver.ImageUrl;
+                                        var userName = actual?.ApprovedBy?.DisplayName ?? "";
+
+                                        var encodedUrl = UrlEncoder.Default.Encode(avatarUrl);
+                                        var imgSrc = $"/api/Handler/imagen-devops?url={encodedUrl}";
+
+                                        var status = actual?.Status?.ToLower() ?? "pending";
+
+                                        var borderClass = status switch
+                                        {
+                                            "approved" => "border-success",
+                                            "rejected" => "border-danger",
+                                            "pending" => "border-secondary",
+                                            _ => "border-light"
+                                        };
+
+                                        var iconClass = status switch
+                                        {
+                                            "approved" => "fa fa-check text-success",
+                                            "rejected" => "fa fa-times text-danger",
+                                            "pending" => "fa fa-clock text-secondary",
+                                            _ => "fa fa-question text-muted"
+                                        };
+
+                                        var title = $"{displayName} - {status}";
+                                        if (!String.IsNullOrEmpty(userName))
+                                        {
+                                            title = $"{userName} como miembro de {displayName} - {status}";
+                                        }
+
+                                        <div class="position-relative mb-2" title="@title">
+                                            <img src="@imgSrc"
+                                                 class="rounded-circle border @borderClass shadow"
+                                                 style="width: 38px; height: 38px;" />
+
+                                            <i class="@iconClass position-absolute bottom-0 end-0 bg-white rounded-circle p-1 shadow"
+                                               style="font-size: 0.65rem; transform: translate(25%, 25%);"></i>
+                                        </div>
+                                    }
+                                </div>
+
+                                <!-- Environment card -->
+                                <div class="card border shadow rounded-3 px-4 py-3" style="min-width: 240px; ">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="mb-0">@env.Name</h6>
+                                        <span class="@env.StatusBadgeLabel text-capitalize">@env.StatusLabel</span>
+                                    </div>
+                                    @if (env.ModifiedOn.HasValue)
+                                    {
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <p class="text text-small">Últ.Act.: @env.ModifiedOn.Value.ToString("dd-MM-yyyy HH:mm:ss")</p>
+                                        </div>
+                                    }
+
+                                    @if (alertStatus.Contains(env.Status) ||
+                                   (env.Status == "inProgress" && env.PostDeployApprovals.Any(a => a.Status == "pending")))
+                                    {
+
+                                        var preUserApprovals = env.PreDeployApprovals
+                                        .Where(a => a.Status == "pending")
+                                        .ToList();
+
+                                        var postUserApprovals = env.PostDeployApprovals
+                                        .Where(a => a.Status == "pending")
+                                        .ToList();
+
+                                        var allPendingApprovals = preUserApprovals
+                                        .Select(a => new { a.Id, a.Approver.DisplayName, a.Approver.Descriptor, IsPost = false })
+                                        .Concat(postUserApprovals.Select(a => new { a.Id, a.Approver.DisplayName, a.Approver.Descriptor, IsPost = true}))
+                                        .ToList();
+
+                                        <div class="mt-3 d-flex flex-column gap-2">
+
+                                            <div class="d-flex justify-content-center gap-2">
+
+                                                @if (allPendingApprovals.Count == 1)
+                                                {
+                                                    var single = allPendingApprovals.First();
+
+                                                    <form method="post" asp-controller="Release" asp-action="ActualizarApproval" class="d-inline">
+                                                        <input type="hidden" name="approvalId" value="@single.Id" />
+                                                        <input type="hidden" name="forGenexus" value="@forGx" />
+                                                        <input type="hidden" name="descriptorGroup" value="@single.Descriptor" />
+                                                        <input type="hidden" name="action" value="Approve" />
+                                                        <input type="hidden" name="releaseId" value="@Model.Id" />
+                                                        <input type="hidden" name="comentario" value="Aprobado automáticamente" />
+                                                        <input type="hidden" name="pullRequestId" value="@Model.PullRequest" />
+                                                        <button type="submit" class="btn btn-success btn-sm">
+                                                            Aprobar @(single.IsPost ? "(Post)" : "")
+                                                        </button>
+                                                    </form>
+                                                    <button type="button"
+                                                            class="btn btn-danger btn-sm"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#modalRechazo"
+                                                            data-approval-id="@single.Id"
+                                                            data-release-id="@Model.Id">
+                                                        Rechazar
+                                                    </button>
+                                                }
+                                                else if (allPendingApprovals.Count > 1)
+                                                {
+                                                    var lista = System.Text.Json.JsonSerializer.Serialize(
+                                                    allPendingApprovals.Select(a => new { id = a.Id, displayName = a.DisplayName, isPost = a.IsPost })
+                                                    );
+
+                                                    <button class="btn btn-primary btn-sm"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#modalElegirGrupo"
+                                                            data-release-id="@Model.Id"
+                                                            data-approvals='@lista'>
+                                                        Aprobar
+                                                    </button>
+                                                    <button class="btn btn-danger btn-sm"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#modalRechazoMultiple"
+                                                            data-approvals='@lista'
+                                                            data-release-id="@Model.Id">
+                                                        Rechazar
+                                                    </button>
+                                                }
+
+
+                                            </div>
+                                            <!-- NUEVO: Acciones para En Progreso -->
+                                            @if (env.Status == "inProgress" && !preUserApprovals.Any())
+                                            {
+                                                <div class="mt-3 d-flex gap-2 justify-content-center">
+                                                    <form method="post" asp-controller="Release" asp-action="CancelarRelease" class="d-inline">
+                                                        <input type="hidden" name="forGenexus" value="@forGx" />
+                                                        <input type="hidden" name="releaseId" value="@Model.Id" />
+                                                        <input type="hidden" name="environmentId" value="@env.Id" />
+                                                        <input type="hidden" name="environmentName" value="@env.Name" />
+                                                        <input type="hidden" name="comentario" value="Cancelado desde app web" />
+                                                        <input type="hidden" name="pullRequestId" value="@Model.PullRequest" />
+                                                        <button type="submit" class="btn btn-warning btn-sm">Cancelar</button>
+                                                    </form>
+
+                                                    <button type="button"
+                                                            class="btn btn-secondary btn-sm logClass"
+                                                            data-release-id="@Model.Id"
+                                                            data-forGenexus="@Model.ForGenexus">
+                                                        Ver Logs
+                                                    </button>
+                                                </div>
+
+                                            }
+                                        </div>
+                                    }
+                                    else if (logueableStatus.Contains(env.Status)) // redeploy
+                                    {
+                                        <div class="mt-3 d-flex gap-2 justify-content-center">
+                                            <form method="post" asp-controller="Release" asp-action="ReDeploy" class="d-inline">
+                                                <input type="hidden" name="forGenexus" value="@forGx" />
+                                                <input type="hidden" name="releaseId" value="@Model.Id" />
+                                                <input type="hidden" name="environmentId" value="@env.Id" />
+                                                <input type="hidden" name="comentario" value="Redeploy desde app web" />
+                                                <input type="hidden" name="pullRequestId" value="@Model.PullRequest" />
+                                                <button type="submit" class="btn btn-primary btn-sm">Re-Deploy</button>
+                                            </form>
+                                            <button type="button"
+                                                    class="btn btn-secondary btn-sm logClass"
+                                                    data-release-id="@Model.Id" data-forGenexus="@Model.ForGenexus">
+                                                Logs
+                                            </button>
+
+                                        </div>
+                                    }
+                                    else if (env.Status == "notStarted")
+                                    {
+                                        <div class="mt-3 d-flex gap-2 justify-content-center">
+                                            <form method="post" asp-controller="Release" asp-action="Deploy" class="d-inline">
+                                                <input type="hidden" name="forGenexus" value="@forGx" />
+                                                <input type="hidden" name="releaseId" value="@Model.Id" />
+                                                <input type="hidden" name="environmentId" value="@env.Id" />
+                                                <input type="hidden" name="comentario" value="Redeploy desde app web" />
+                                                <input type="hidden" name="pullRequestId" value="@Model.PullRequest" />
+                                                <button type="submit" class="btn btn-primary btn-sm">Deploy</button>
+                                            </form>
+                                            
+                                        </div>
+                                    }
+                                </div>
+
+                                <!-- Post-Approvals -->
+                                <div class="d-flex flex-column align-items-center">
+
+                                    @foreach (var defined in env.PostApprovedDefinition)
+                                    {
+                                        var actual = env.PostDeployApprovals.FirstOrDefault(a => a.Approver.Id == defined.Approver.Id);
+                                        var displayName = defined.Approver.DisplayName;
+                                        var avatarUrl = actual?.ApprovedBy?.ImageUrl ?? defined.Approver.ImageUrl;
+                                        var status = actual?.Status?.ToLower() ?? "pending";
+                                        var encodedUrl = UrlEncoder.Default.Encode(avatarUrl);
+                                        var imgSrc = $"/api/Handler/imagen-devops?url={encodedUrl}";
+                                        var userName = actual?.ApprovedBy?.DisplayName ?? "";
+                                        var borderClass = status switch
+                                        {
+                                            "approved" => "border-success",
+                                            "rejected" => "border-danger",
+                                            "pending" => "border-secondary",
+                                            _ => "border-light"
+                                        };
+
+                                        var iconClass = status switch
+                                        {
+                                            "approved" => "fa fa-check text-success",
+                                            "rejected" => "fa fa-times text-danger",
+                                            "pending" => "fa fa-clock text-secondary",
+                                            _ => "fa fa-question text-muted"
+                                        };
+                                        var title = $"{displayName} - {status}";
+                                        if (!String.IsNullOrEmpty(userName))
+                                        {
+                                            title = $"{userName} como miembro de {displayName} - {status}";
+                                        }
+
+                                        <div class="position-relative mb-2" title="@title">
+                                            <img src="@imgSrc"
+                                                 class="rounded-circle border @borderClass shadow"
+                                                 style="width: 38px; height: 38px;" />
+
+                                            <i class="@iconClass position-absolute bottom-0 end-0 bg-white rounded-circle p-1 shadow"
+                                               style="font-size: 0.65rem; transform: translate(25%, 25%);"></i>
+                                        </div>
+                                    }
+                                </div>
+
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalRechazo" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="post" asp-action="ActualizarApproval">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Motivo del rechazo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="approvalId" id="modalRechazoApprovalId" />
+                    <input type="hidden" name="forGx" id="forGx" value="@forGx" />
+                    <input type="hidden" name="releaseId" id="modalRechazoReleaseId" />
+                    <input type="hidden" name="pullRequestId" value="@Model.PullRequest" />
+                    <input type="hidden" name="action" value="Reject" />
+                    <div class="mb-3">
+                        <label for="comentarioRechazo" class="form-label">Comentario</label>
+                        <textarea class="form-control" name="comentario" id="comentarioRechazo" rows="3" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-danger">Rechazar</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+<!-- Modal para elegir el grupo de aprobación -->
+<div class="modal fade" id="modalElegirGrupo" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="post" asp-action="ActualizarApproval">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Elegir grupo para aprobar</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="forGx" id="forGx" value="@forGx" />
+                    <input type="hidden" name="releaseId" id="inputReleaseId" />
+                    <input type="hidden" name="approvalId" id="inputApprovalId" />
+                    <input type="hidden" name="descriptorGroup" id="inputDescriptorGroup" />
+                    <input type="hidden" name="action" value="Approve" />
+                    <input type="hidden" name="pullRequestId" value="@Model.PullRequest" />
+                    <input type="hidden" name="comentario" value="Aprobado vía selección manual" />
+
+                    <div id="contenedor-opciones-aprobacion">
+                        <!-- Se llenará por JavaScript con botones por cada approval -->
+                    </div>
+
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="modal fade" id="modalRechazoMultiple" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="post" asp-action="ActualizarApproval">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Seleccioná grupo para rechazar</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="forGx" id="forGx" value="@forGx" />
+                    <input type="hidden" name="approvalId" id="modalRechazoMultiApprovalId" />
+                    <input type="hidden" name="releaseId" id="modalRechazoMultiReleaseId" />
+                    <input type="hidden" name="descriptorGroup" id="inputDescriptorGroup" />
+                    <input type="hidden" name="pullRequestId" value="@Model.PullRequest" />
+                    <input type="hidden" name="action" value="Reject" />
+                    <div class="mb-3">
+                        <label for="comentarioRechazoMulti" class="form-label">Comentario</label>
+                        <textarea class="form-control" name="comentario" id="comentarioRechazoMulti" rows="3" required></textarea>
+                    </div>
+                    <div id="contenedor-opciones-rechazo"></div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+<!-- Modal -->
+<div class="modal fade" id="logModal" tabindex="-1" aria-labelledby="logModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="logModalLabel">Azure DevOps Log</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="editor" style="height: 500px; width: 100%;">
+                    Loading log...
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/ace.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/mode-sql.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/theme-textmate.js"></script>
+    <script>
+        //logs
+        const editor = ace.edit("editor");
+        editor.setTheme("ace/theme/monokai");
+        editor.session.setMode("ace/mode/text");
+        editor.setReadOnly(true);
+
+        // Función para aplicar decoraciones a líneas con ##[section]
+        function decorateLog(logText) {
+            editor.session.setValue(logText);
+            const lines = logText.split('\n');
+            lines.forEach((line, idx) => {
+                if (line.includes("##[section]")) {
+                    editor.session.addGutterDecoration(idx, "ace_section-line");
+                }
+            });
+        }
+
+        function formatLog(log) {
+            return log
+                .split(/\r?\n/)
+                .map(line => {
+                    line = line.replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z\s*/, '');
+                    if (line.startsWith('##[section]Starting:')) return `\n=== ${line.replace('##[section]Starting:', '').trim()} ===`;
+                    if (line.startsWith('##[command]')) return '';
+                    if (line.startsWith('##[')) return '';
+                    if (line.trim().startsWith('-Command')) return '';
+                    if (/^=+$/.test(line.trim())) return '';
+                    return line;
+                })
+                .filter(line => line.trim() !== '')
+                .join('\n');
+        }
+
+
+
+        // Evento click del botón "Ver Log"
+        document.querySelectorAll('.logClass').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const idPR = this.getAttribute('data-release-id');
+                const fGx = this.getAttribute('data-forGenexus');
+                // Limpiar contenido anterior
+                editor.session.setValue("Cargando log...");
+                //editor.session.clearGutterDecorations();
+
+                // Mostrar el modal
+                const modal = new bootstrap.Modal(document.getElementById('logModal'));
+                modal.show();
+
+                // Fetch del backend
+                fetch(`/release/GetLogRelease?idRelease=${idPR}&fromGenexus=${fGx}`)
+                    .then(response => {
+                        if (!response.ok) throw new Error("Error al obtener log");
+                        return response.json(); // ✅ Interpretar como JSON
+                    })
+                    .then(data => {
+                        decorateLog(formatLog(data.log)); // ✅ Esto funcionará si el JSON tiene { log: "..." }
+                    })
+                    .catch(err => {
+                        editor.session.setValue("No se pudo obtener el log:\n" + err.message);
+                    });
+            });
+        });
+
+        const modalRechazo = document.getElementById('modalRechazo');
+        modalRechazo.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            modalRechazo.querySelector('#modalRechazoApprovalId').value = button.getAttribute('data-approval-id');
+            modalRechazo.querySelector('#modalRechazoReleaseId').value = button.getAttribute('data-release-id');
+            modalRechazo.querySelector('#comentarioRechazo').value = "";
+        });
+
+        const modalElegirGrupo = document.getElementById('modalElegirGrupo');
+        modalElegirGrupo.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const releaseId = button.getAttribute('data-release-id');
+            const approvalsRaw = button.getAttribute('data-approvals');
+            const approvals = JSON.parse(approvalsRaw);
+
+            const container = modalElegirGrupo.querySelector('#contenedor-opciones-aprobacion');
+            container.innerHTML = '';
+
+            modalElegirGrupo.querySelector('#inputReleaseId').value = releaseId;
+
+            approvals.forEach(a => {
+                const btn = document.createElement('button');
+                btn.type = 'submit';
+                btn.className = 'btn btn-outline-primary w-100 mb-2';
+                btn.textContent = `Aprobar como ${a.displayName}`;
+                btn.addEventListener('click', function (e) {
+                    e.preventDefault(); // Prevenir el submit automático
+                    modalElegirGrupo.querySelector('#inputApprovalId').value = a.id;
+                    modalElegirGrupo.querySelector('#inputDescriptorGroup').value = a.descriptor;
+                    // Ahora sí enviar el formulario
+                    const form = modalElegirGrupo.querySelector('form');
+                    form.submit();
+                });
+                container.appendChild(btn);
+            });
+        });
+        const modalRechazoMultiple = document.getElementById('modalRechazoMultiple');
+        modalRechazoMultiple.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const releaseId = button.getAttribute('data-release-id');
+            const approvalsRaw = button.getAttribute('data-approvals');
+            const approvals = JSON.parse(approvalsRaw);
+
+            const container = modalRechazoMultiple.querySelector('#contenedor-opciones-rechazo');
+            container.innerHTML = '';
+            modalRechazoMultiple.querySelector('#modalRechazoMultiReleaseId').value = releaseId;
+            modalRechazoMultiple.querySelector('#comentarioRechazoMulti').value = "";
+
+            approvals.forEach(a => {
+                const btn = document.createElement('button');
+                btn.type = 'submit';
+                btn.className = 'btn btn-outline-danger w-100 mb-2';
+                btn.textContent = `Rechazar como ${a.displayName}`;
+                btn.onclick = () => {
+                    modalRechazoMultiple.querySelector('#modalRechazoMultiApprovalId').value = a.id;
+                    modalRechazoMultiple.querySelector('#inputDescriptorGroup').value = a.descriptor;
+                };
+                container.appendChild(btn);
+            });
+        });
+    </script>
+}
+
+@functions {
+    string GetStatusColor(string status) => status switch
+    {
+        "Succeeded" => "success",
+        "Queued" => "warning",
+        "NotDeployed" => "secondary",
+        "Failed" => "danger",
+        _ => "light"
+    };
+}

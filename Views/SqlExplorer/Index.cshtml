@@ -1,0 +1,1011 @@
+﻿@model PasadorScript.ViewModels.SqlExplorerViewModel
+@section Styles {
+    <style>
+        .search-result-item {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+            .search-result-item:hover {
+                background-color: #f8f9fa;
+                transform: translateY(-1px);
+            }
+
+        .structure-type-badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .search-container {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .loading-spinner {
+            display: none;
+        }
+
+        .ace-editor {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .structure-preview {
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+        }
+
+        .auto-filename {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #28a745;
+            background-color: #f8f9fa;
+        }
+
+        .filename-preview {
+            font-size: 0.85em;
+            color: #6c757d;
+            font-style: italic;
+        }
+    </style>
+}
+
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3 class="fw-bold mb-2">SQL Explorer</h3>
+            <p class="text-muted mb-0">Explorar y consultar estructuras históricas de base de datos</p>
+        </div>
+        <div class="text-end">
+            <i class="bi bi-database-fill text-primary" style="font-size: 2.5rem;"></i>
+        </div>
+    </div>
+</div>
+
+<form id="form-virtual-files" method="post">
+    <!-- Información básica del script -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="mb-3">
+                        <label asp-for="RepositoryId" class="form-label"></label>
+                        <select asp-for="RepositoryId" asp-items="ViewBag.Aplicativos" class="form-control">
+                            <option value="">Seleccione un valor</option>
+                        </select>
+                        <span asp-validation-for="RepositoryId" class="text-danger"></span>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="mb-3">
+                        <label class="form-label">Tipo de Estructura</label>
+                        <select id="structureType" class="form-control">
+                            <option value="">Todos los tipos</option>
+                            <option value="stored_procedures">Stored Procedures</option>
+                            <option value="views">Views</option>
+                            <option value="functions">Functions</option>
+                            <option value="tables">Tables</option>
+                            <option value="triggers">Triggers</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="mb-3">
+                        <label class="form-label">Buscar por Nombre</label>
+                        <div class="input-group">
+                            <input type="text" id="searchInput" class="form-control" placeholder="Nombre de la estructura...">
+                            <button class="btn btn-outline-primary" type="button" id="btnSearch">
+                                <i class="bi bi-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Spinner de carga -->
+            <div class="loading-spinner text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Buscando...</span>
+                </div>
+                <p class="mt-2">Buscando estructuras...</p>
+            </div>
+
+            <!-- Resultados de búsqueda -->
+            <div id="searchResults" class="search-container">
+                <div class="text-center py-5" id="emptyState">
+                    <i class="bi bi-search display-4 text-muted mb-3"></i>
+                    <h5 class="text-muted">No hay resultados para mostrar</h5>
+                    <p class="text-muted">Utiliza los filtros arriba para buscar estructuras SQL</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+<div class="modal fade" id="modalVirtualFile" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span id="modalIcon"></span>
+                    <span id="modalTitle">Editar Archivo</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Panel de configuración del editor -->
+                <div class="card mb-3" id="editorSettingsCard">
+                    <div class="card-header py-2">
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="settingsDropdown" aria-expanded="false">
+                                <i class="fas fa-cog me-1"></i>
+                                <span id="settingsText">Configuración del Editor</span>
+                            </button>
+                            <!--<ul class="dropdown-menu" aria-labelledby="settingsDropdown">
+                                <li>
+                                    <button class="dropdown-item" type="button" id="toggleSettingsContent">
+                                        <i class="fas fa-chevron-down me-2" id="chevronIcon"></i>
+                                        <span id="toggleText">Ocultar opciones</span>
+                                    </button>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <button class="dropdown-item" type="button" id="hideSettingsPanel">
+                                        <i class="fas fa-eye-slash me-2"></i>
+                                        Ocultar configuración
+                                    </button>
+                                </li>
+                            </ul>-->
+                        </div>
+                        <small class="text-muted ms-2">Personaliza la apariencia del editor</small>
+                    </div>
+                    <div class="collapse" id="editorSettings">
+                        <div class="card-body py-2">
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <label class="form-label small">Tema</label>
+                                    <select id="themeSelect" class="form-select form-select-sm">
+                                        <option value="monokai">Oscuro (Monokai)</option>
+                                        <option value="github">Claro (GitHub)</option>
+                                        <option value="twilight">Crepúsculo</option>
+                                        <option value="solarized_dark">Solarized Oscuro</option>
+                                        <option value="solarized_light">Solarized Claro</option>
+                                        <option value="textmate">Mate</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="fontSizeSlider" class="form-label small">
+                                        Tamaño de Fuente: <span id="fontSizeValue">14</span>px
+                                    </label>
+                                    <input type="range" class="form-range" id="fontSizeSlider"
+                                           min="10" max="24" value="14" step="1">
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="tabSizeSlider" class="form-label small">
+                                        Tamaño de Tab: <span id="tabSizeValue">4</span>
+                                    </label>
+                                    <input type="range" class="form-range" id="tabSizeSlider"
+                                           min="2" max="8" value="4" step="1">
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check form-switch mt-4">
+                                        <input class="form-check-input" type="checkbox" id="wordWrapToggle" checked>
+                                        <label class="form-check-label small" for="wordWrapToggle">
+                                            Ajuste de línea
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row g-3 mt-1">
+                                <div class="col-md-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="showPrintMarginToggle">
+                                        <label class="form-check-label small" for="showPrintMarginToggle">
+                                            Mostrar margen
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="showGutterToggle" checked>
+                                        <label class="form-check-label small" for="showGutterToggle">
+                                            Números de línea
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="highlightActiveToggle" checked>
+                                        <label class="form-check-label small" for="highlightActiveToggle">
+                                            Resaltar línea activa
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="resetEditorSettings">
+                                        <i class="fas fa-undo me-1"></i>Restaurar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-2 d-flex justify-content-between align-items-center">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Edita el contenido que será incluido en el script. El nombre del archivo se genera automáticamente.
+                    </small>
+                    <button class="btn btn-sm btn-primary" type="button" id="showSettingsPanel" style="display: none;" title="Mostrar configuración del editor">
+                        <i class="fas fa-cog me-1"></i>Configuración
+                    </button>
+                </div>
+                <div id="modalEditor" style="height: 500px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnGuardarArchivo">
+                    <i class="bi bi-save me-1"></i>Guardar Cambios
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/ace.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/mode-sql.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/theme-monokai.js"></script>
+    <script>
+        let modalEditor = null;
+
+        // Configuración por defecto del editor
+        const defaultEditorSettings = {
+            theme: 'monokai',
+            fontSize: 14,
+            tabSize: 4,
+            wrap: true,
+            showPrintMargin: false,
+            showGutter: true,
+            highlightActiveLine: true
+        };
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', function () {
+            initializeComponents();
+        });
+
+        function initializeComponents() {
+            initializeAceEditor();
+            initializeEventListeners();
+        }
+
+        function initializeEventListeners() {
+            // Búsqueda de estructuras - agregar preventDefault
+            document.getElementById('btnSearch').addEventListener('click', function (e) {
+                e.preventDefault();
+                searchStructures();
+            });
+
+            document.getElementById('searchInput').addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    searchStructures();
+                }
+            });
+
+            // Filtro por tipo - agregar preventDefault al change
+            document.getElementById('structureType').addEventListener('change', function (e) {
+                e.preventDefault();
+                //searchStructures();
+            });
+        }
+
+        function initializeAceEditor() {
+
+            // Configuración por defecto del editor
+            const defaultEditorSettingsReadOnly = {
+                theme: 'textmate',
+                fontSize: 14,
+                tabSize: 4,
+                wrap: true,
+                showPrintMargin: false,
+                showGutter: true,
+                highlightActiveLine: true
+            };
+
+            // Cargar configuración guardada
+            const settings = loadEditorSettings();
+            const panelVisible = loadPanelVisibility();
+
+            // Editor para contenido editable
+            modalEditor = ace.edit('modalEditor');
+            modalEditor.session.setMode('ace/mode/sql');
+
+
+            // Aplicar configuración a ambos editores
+            applyEditorSettings(modalEditor, settings, false);
+
+            // Actualizar controles de la interfaz
+            updateEditorControls(settings);
+            // Aplicar visibilidad del panel
+            applyPanelVisibility(panelVisible);
+
+            // Configurar event listeners para los controles
+            setupEditorControls();
+
+            // Agregar listener para detectar cambios en el contenido
+            modalEditor.session.on('change', function () {
+                updateFileNameFromContent();
+            });
+        }
+
+        function showLoadingSpinner(show) {
+            const spinner = document.querySelector('.loading-spinner');
+            spinner.style.display = show ? 'block' : 'none';
+        }
+        async function searchStructures() {
+            const structureType = document.getElementById('structureType').value;
+            const searchTerm = document.getElementById('searchInput').value;
+            const repositoryId = document.querySelector('[name="RepositoryId"]').value;
+
+            if (!repositoryId) {
+                await Swal.fire({
+                    icon: 'warning',
+                    title: 'Aplicativo requerido',
+                    text: 'Por favor selecciona un aplicativo primero',
+                    confirmButtonText: 'Entendido'
+                });
+                return;
+            }
+
+            if (searchTerm.length<3) {
+                await Swal.fire({
+                    icon: 'warning',
+                    title: 'Criterio de búsqueda requerido',
+                    text: 'Por favor ingresá al menos un par de caracteres en el criterio de búsqueda',
+                    confirmButtonText: 'Entendido'
+                });
+                return;
+            }
+
+            showLoadingSpinner(true);
+
+            try {
+                const response = await fetch('/SqlFiles/SearchStructures', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        repositoryId: repositoryId,
+                        structureType: structureType,
+                        searchTerm: searchTerm
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const structures = await response.json();
+                displaySearchResults(structures);
+            } catch (error) {
+                console.error('Error searching structures:', error);
+                await Swal.fire({
+                    icon: 'error',
+                    title: 'Error de búsqueda',
+                    text: 'Ocurrió un error al buscar las estructuras. Por favor intenta nuevamente.',
+                    confirmButtonText: 'Entendido'
+                });
+            } finally {
+                showLoadingSpinner(false);
+            }
+        }
+
+        function displaySearchResults(structures) {
+            const resultsContainer = document.getElementById('searchResults');
+            const repositoryId = document.querySelector('[name="RepositoryId"]').value;
+
+            if (structures.length === 0) {
+                resultsContainer.innerHTML = `
+                                                                                                    <div class="text-center py-4 text-muted">
+                                                                                                        <i class="fas fa-search fa-3x mb-3"></i>
+                                                                                                        <p>No se encontraron estructuras con los criterios especificados</p>
+                                                                                                    </div>
+                                                                                                `;
+                return;
+            }
+
+            const resultsHtml = structures.map(structure => `
+                                                                                                   <div class="card search-result-item mb-2" data-structure='${JSON.stringify(structure)}' data-repoid="${repositoryId}" data-path="${structure.path}" title="Consultar">
+                                                                                                    <div class="card-body py-2">
+                                                                                                        <div class="d-flex justify-content-between align-items-center">
+                                                                                                            <div>
+                                                                                                                <h6 class="mb-1">${getStructureIcon(structure.type)} ${structure.name}</h6>
+                                                                                                                <small class="text-muted">${structure.path}</small>
+                                                                                                            </div>
+                                                                                                            <div class="search-meta">
+                                                                                                                <span class="badge bg-primary structure-type-badge">${structure.type}</span>
+                                                                                                                <small class="text-muted ms-2 last-modified">Cargando datos de su última versión...</small>
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            `).join('');
+
+            resultsContainer.innerHTML = resultsHtml;
+            refreshLastModifiedInfo();
+
+            // Agregar event listeners a los resultados
+            resultsContainer.querySelectorAll('.search-result-item').forEach(item => {
+                item.addEventListener('click', function () {
+                    const structure = JSON.parse(this.dataset.structure);
+                    //loadStructureFromDevOps(structure);
+                    GoToDetail(structure.path);
+                });
+            });
+        }
+
+        function GoToDetail(filePath) {
+            const repositoryId = document.querySelector('[name="RepositoryId"]').value;
+            window.location.href = `SqlExplorer/DetailSqlExplorer?repositoryId=${repositoryId}&filePath=${filePath}`;
+        }
+
+        async function loadStructureFromDevOps(structure) {
+            try {
+                const repositoryId = document.querySelector('[name="RepositoryId"]').value;
+
+                const response = await fetch('/SqlFiles/GetStructureContent', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        repositoryId: repositoryId,
+                        filePath: structure.path
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const content = await response.text();
+                const parsed = parseStructureFromContent(content);
+
+                // --------------------- content for edit -----------------------------------
+                const responseForEdit = await fetch('/SqlFiles/GetContentForEdit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        content: content,
+                        type: structure.type,
+                        schema: parsed.schema,
+                        name: parsed.name || structure.name
+                    })
+                });
+
+                if (!responseForEdit.ok) {
+                    throw new Error(`HTTP error! status: ${responseForEdit.status}`);
+                }
+                const sqlTemplate = await responseForEdit.json();
+                //const contentForEdit = await responseForEdit.text();
+                // --------------------- content for edit -----------------------------------
+
+
+                const fullName = `${parsed.schema || 'dbo'}.${parsed.name || structure.name}`;
+                const fileName = generateFileName(fullName, structure.type);
+
+                const virtualFile = {
+                    name: fileName,
+                    content: content,
+                    origin: 'devops',
+                    originalPath: structure.path,
+                    structureType: structure.type,
+                    autoGeneratedFileName: fileName,
+                    parsedStructure: parsed,
+                    requiredLines: sqlTemplate.requiredLines,
+                    _estado: "modificado",
+                    //_hash: await calculateHash(content)
+                };
+
+                //addVirtualFile(virtualFile);
+                openFileModal(virtualFile, false);
+
+
+
+            } catch (error) {
+                console.error('Error loading structure:', error);
+                await Swal.fire({
+                    icon: 'error',
+                    title: 'Error al cargar estructura',
+                    text: 'No se pudo cargar la estructura desde DevOps. Por favor intenta nuevamente.',
+                    confirmButtonText: 'Entendido'
+                });
+            }
+        }
+
+        // Función para actualizar el nombre del archivo basado en el contenido
+        function updateFileNameFromContent() {
+            // No actualizar si es un archivo desde DevOps (para mantener ALTER consistency)
+            if (currentEditingFile && currentEditingFile.origin === 'devops') {
+                return;
+            }
+
+            const content = modalEditor.getValue();
+            const parsed = parseStructureFromContent(content);
+
+            if (parsed.name && parsed.type) {
+                const fullName = `${parsed.schema}.${parsed.name}`;
+                const fileName = generateFileName(fullName, parsed.type);
+                //document.getElementById('modalFileName').value = fileName;
+
+                // Actualizar el archivo actual
+                if (currentEditingFile) {
+                    currentEditingFile.autoGeneratedFileName = fileName;
+                    currentEditingFile.structureType = parsed.type;
+                    currentEditingFile.parsedStructure = parsed;
+                }
+            }
+        }
+
+        
+        function openFileModal(file, isNew = false) {
+            currentEditingFile = file;
+
+            document.getElementById('modalTitle').textContent = isNew ? 'Nuevo Archivo' : 'Editar Archivo';
+
+            const iconElement = document.getElementById('modalIcon');
+            iconElement.innerHTML = getStructureIcon(file.structureType || 'sql');
+
+            // Configurar contenido de los editores
+            if (isNew) {
+                // Para archivos nuevos, ambos editores muestran el mismo contenido inicialmente
+                modalEditor.setValue(file.content, -1);
+                // originalEditor.setValue(file.content);
+
+                // Para archivos nuevos, establecer originalContent
+                if (!file.originalContent) {
+                    file.originalContent = file.content;
+                }
+            } else {
+                // Para archivos existentes
+                if (file.content) {
+                    modalEditor.setValue(file.content, -1);
+                    const readOnlyLines = file.requiredLines;
+
+                } else {
+                    modalEditor.setValue(file.content, -1);
+                }
+
+                // El contenido original siempre viene de originalContent, o si no existe, del content inicial
+                const originalContent = file.originalContent || file.content;
+                //originalEditor.setValue(originalContent);
+
+                // Asegurar que originalContent esté guardado
+                if (!file.originalContent) {
+                    file.originalContent = file.content;
+                }
+            }
+
+            modalEditor.clearSelection();
+            //originalEditor.clearSelection();
+
+
+            const modal = new bootstrap.Modal(document.getElementById('modalVirtualFile'));
+            modal.show();
+
+            // Redimensionar editores cuando el modal esté completamente mostrado
+            modal._element.addEventListener('shown.bs.modal', function () {
+                modalEditor.resize();
+                //originalEditor.resize();
+            });
+        }
+
+        // Cargar preferencia de visibilidad del panel
+        function loadPanelVisibility() {
+            const saved = localStorage.getItem('editorPanelVisible');
+            return saved ? JSON.parse(saved) : true; // Por defecto visible
+        }
+
+        // Guardar preferencia de visibilidad del panel
+        function savePanelVisibility(visible) {
+            localStorage.setItem('editorPanelVisible', JSON.stringify(visible));
+        }
+
+        // Cargar configuración del localStorage o usar defaults
+        function loadEditorSettings() {
+            const saved = localStorage.getItem('aceEditorSettings');
+            return saved ? { ...defaultEditorSettings, ...JSON.parse(saved) } : defaultEditorSettings;
+        }
+
+        // Guardar configuración en localStorage
+        function saveEditorSettings(settings) {
+            localStorage.setItem('aceEditorSettings', JSON.stringify(settings));
+        }
+
+        // Aplicar configuración a un editor
+        function applyEditorSettings(editor, settings, readOnly = false) {
+            editor.setTheme(`ace/theme/${settings.theme}`);
+            editor.setOptions({
+                fontSize: settings.fontSize,
+                tabSize: settings.tabSize,
+                wrap: settings.wrap,
+                showPrintMargin: settings.showPrintMargin,
+                showGutter: settings.showGutter,
+                highlightActiveLine: readOnly ? false : settings.highlightActiveLine,
+                readOnly: readOnly
+            });
+        }
+
+        // Actualizar controles de la interfaz con la configuración actual
+        function updateEditorControls(settings) {
+            document.getElementById('themeSelect').value = settings.theme;
+            document.getElementById('fontSizeSlider').value = settings.fontSize;
+            document.getElementById('fontSizeValue').textContent = settings.fontSize;
+            document.getElementById('tabSizeSlider').value = settings.tabSize;
+            document.getElementById('tabSizeValue').textContent = settings.tabSize;
+            document.getElementById('wordWrapToggle').checked = settings.wrap;
+            document.getElementById('showPrintMarginToggle').checked = settings.showPrintMargin;
+            document.getElementById('showGutterToggle').checked = settings.showGutter;
+            document.getElementById('highlightActiveToggle').checked = settings.highlightActiveLine;
+        }
+        // Aplicar visibilidad del panel con animaciones
+        function applyPanelVisibility(visible) {
+            const settingsCard = document.getElementById('editorSettingsCard');
+            const showBtn = document.getElementById('showSettingsPanel');
+
+            if (visible) {
+                settingsCard.style.display = 'block';
+                showBtn.style.display = 'none';
+            } else {
+                settingsCard.style.display = 'none';
+                showBtn.style.display = 'inline-block';
+            }
+        }
+        function setupEditorControls() {
+            // Reemplazar la sección de controles de visibilidad del panel por:
+
+            // Control para mostrar/ocultar el contenido del collapse
+            document.getElementById('settingsDropdown').addEventListener('click', function () {
+                const collapse = document.getElementById('editorSettings');
+                const chevronIcon = document.getElementById('chevronIcon');
+                const toggleText = document.getElementById('toggleText');
+
+                const bsCollapse = bootstrap.Collapse.getInstance(collapse) || new bootstrap.Collapse(collapse, { toggle: false });
+
+                if (collapse.classList.contains('show')) {
+                    bsCollapse.hide();
+
+                } else {
+                    bsCollapse.show();
+
+                }
+            });
+
+
+            // Tema
+            document.getElementById('themeSelect').addEventListener('change', function () {
+                const settings = loadEditorSettings();
+                settings.theme = this.value;
+                applyEditorSettings(modalEditor, settings, false);
+                saveEditorSettings(settings);
+            });
+
+            // Tamaño de fuente
+            document.getElementById('fontSizeSlider').addEventListener('input', function () {
+                const settings = loadEditorSettings();
+                settings.fontSize = parseInt(this.value);
+                document.getElementById('fontSizeValue').textContent = settings.fontSize;
+                applyEditorSettings(modalEditor, settings, false);
+                saveEditorSettings(settings);
+            });
+
+            // Tamaño de tab
+            document.getElementById('tabSizeSlider').addEventListener('input', function () {
+                const settings = loadEditorSettings();
+                settings.tabSize = parseInt(this.value);
+                document.getElementById('tabSizeValue').textContent = settings.tabSize;
+                applyEditorSettings(modalEditor, settings, false);
+                saveEditorSettings(settings);
+            });
+
+            // Ajuste de línea
+            document.getElementById('wordWrapToggle').addEventListener('change', function () {
+                const settings = loadEditorSettings();
+                settings.wrap = this.checked;
+                applyEditorSettings(modalEditor, settings, false);
+                saveEditorSettings(settings);
+            });
+
+            // Mostrar margen
+            document.getElementById('showPrintMarginToggle').addEventListener('change', function () {
+                const settings = loadEditorSettings();
+                settings.showPrintMargin = this.checked;
+                applyEditorSettings(modalEditor, settings, false);
+                saveEditorSettings(settings);
+            });
+
+            // Números de línea
+            document.getElementById('showGutterToggle').addEventListener('change', function () {
+                const settings = loadEditorSettings();
+                settings.showGutter = this.checked;
+                applyEditorSettings(modalEditor, settings, false);
+                saveEditorSettings(settings);
+            });
+
+            // Resaltar línea activa
+            document.getElementById('highlightActiveToggle').addEventListener('change', function () {
+                const settings = loadEditorSettings();
+                settings.highlightActiveLine = this.checked;
+                // El editor original nunca resalta la línea activa
+                saveEditorSettings(settings);
+            });
+
+            // Restaurar configuración por defecto
+            document.getElementById('resetEditorSettings').addEventListener('click', function () {
+                applyEditorSettings(modalEditor, defaultEditorSettings, false);
+                updateEditorControls(defaultEditorSettings);
+                saveEditorSettings(defaultEditorSettings);
+
+                // Mostrar confirmación
+                const btn = this;
+                const originalHtml = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check me-1"></i>Restaurado';
+                btn.classList.remove('btn-outline-primary');
+                btn.classList.add('btn-success');
+
+                setTimeout(() => {
+                    btn.innerHTML = originalHtml;
+                    btn.classList.remove('btn-success');
+                    btn.classList.add('btn-outline-primary');
+                }, 1500);
+            });
+        }
+
+        // Funciones auxiliares
+        function getStructureIcon(type) {
+            const icons = {
+                'StoredProcedure': '<i class="fas fa-cogs text-primary"></i>',
+                'View': '<i class="fas fa-eye text-info"></i>',
+                'Function': '<i class="fas fa-cog text-warning"></i>',
+                'Table': '<i class="fas fa-table text-success"></i>',
+                'Trigger': '<i class="fas fa-bolt text-danger"></i>',
+                'sql': '<i class="fas fa-file-code text-secondary"></i>'
+            };
+            return icons[type] || icons['sql'];
+        }
+
+        function getOriginBadge(origin) {
+            const badges = {
+                'devops': '<span class="badge bg-info">DevOps</span>',
+                'template': '<span class="badge bg-success">Template</span>',
+                'upload': '<span class="badge bg-primary">Subido</span>',
+                'new': '<span class="badge bg-warning">Nuevo</span>',
+                'manual': '<span class="badge bg-secondary">Manual</span>'
+            };
+            return badges[origin] || '';
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString('es-AR', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Función para extraer información de la estructura desde el contenido SQL
+        function parseStructureFromContent(content) {
+            if (!content) return { type: '', name: '', schema: 'dbo', isStructure: false };
+
+            const lines = content.split('\n').map(line => line.trim().toUpperCase());
+
+            for (const line of lines) {
+                // Buscar CREATE/ALTER statements
+                if (line.startsWith('CREATE') || line.startsWith('ALTER')) {
+                    // Stored Procedure
+                    const spMatch = line.match(/(?:CREATE|ALTER)\s+(?:OR\s+ALTER\s+)?PROCEDURE\s+(?:\[?(\w+)\]?\.)?(?:\[?(\w+)\]?)/i);
+                    if (spMatch) {
+                        return {
+                            type: 'StoredProcedure',
+                            schema: spMatch[1] || 'dbo',
+                            name: spMatch[2],
+                            isStructure: true
+                        };
+                    }
+
+                    // View
+                    const viewMatch = line.match(/(?:CREATE|ALTER)\s+(?:OR\s+ALTER\s+)?VIEW\s+(?:\[?(\w+)\]?\.)?(?:\[?(\w+)\]?)/i);
+                    if (viewMatch) {
+                        return {
+                            type: 'View',
+                            schema: viewMatch[1] || 'dbo',
+                            name: viewMatch[2],
+                            isStructure: true
+                        };
+                    }
+
+                    // Function
+                    const funcMatch = line.match(/(?:CREATE|ALTER)\s+(?:OR\s+ALTER\s+)?FUNCTION\s+(?:\[?(\w+)\]?\.)?(?:\[?(\w+)\]?)/i);
+                    if (funcMatch) {
+                        return {
+                            type: 'Function',
+                            schema: funcMatch[1] || 'dbo',
+                            name: funcMatch[2],
+                            isStructure: true
+                        };
+                    }
+
+                    // Table
+                    const tableMatch = line.match(/CREATE\s+TABLE\s+(?:\[?(\w+)\]?\.)?(?:\[?(\w+)\]?)/i);
+                    if (tableMatch) {
+                        return {
+                            type: 'Table',
+                            schema: tableMatch[1] || 'dbo',
+                            name: tableMatch[2],
+                            isStructure: true
+                        };
+                    }
+
+                    // Trigger
+                    const triggerMatch = line.match(/(?:CREATE|ALTER)\s+(?:OR\s+ALTER\s+)?TRIGGER\s+(?:\[?(\w+)\]?\.)?(?:\[?(\w+)\]?)/i);
+                    if (triggerMatch) {
+                        return {
+                            type: 'Trigger',
+                            schema: triggerMatch[1] || 'dbo',
+                            name: triggerMatch[2],
+                            isStructure: true
+                        };
+                    }
+                }
+            }
+
+            return { type: '', name: '', schema: 'dbo', isStructure: false };
+        }
+
+        // Nueva función para generar el nombre de archivo automáticamente
+        function generateFileName(structureName, structureType) {
+            if (!structureName || !structureType) return '';
+
+            // Limpiar el nombre de la estructura
+            const cleanName = structureName.trim().toLowerCase();
+
+            // Extraer schema y nombre
+            let schema = 'dbo';
+            let name = cleanName;
+
+            if (cleanName.includes('.')) {
+                const parts = cleanName.split('.');
+                schema = parts[0];
+                name = parts.slice(1).join('.');
+            }
+
+            // Mapear tipos a carpetas
+            const typeToFolder = {
+                'StoredProcedure': 'stored_procedures',
+                'View': 'views',
+                'Function': 'functions',
+                'Table': 'tables',
+                'Trigger': 'triggers'
+            };
+
+            const folder = typeToFolder[structureType] || 'scripts';
+
+            return `/database/${folder}/${schema}/${name}.sql`;
+        }
+
+        function initializePanelControls() {
+            // Aplicar visibilidad del panel según configuración guardada
+            const panelVisible = loadPanelVisibility();
+            applyPanelVisibility(panelVisible);
+
+            // Configurar event listeners para visibilidad (remover listeners previos)
+            const hideBtn = document.getElementById('hideSettingsPanel');
+            const showBtn = document.getElementById('showSettingsPanel');
+
+            // Remover listeners existentes (si los hay)
+            hideBtn.replaceWith(hideBtn.cloneNode(true));
+            showBtn.replaceWith(showBtn.cloneNode(true));
+
+            // Agregar nuevos listeners
+            document.getElementById('hideSettingsPanel').addEventListener('click', function () {
+                console.log('Ocultando panel...'); // Para debug
+                applyPanelVisibility(false);
+                savePanelVisibility(false);
+            });
+
+            document.getElementById('showSettingsPanel').addEventListener('click', function () {
+                console.log('Mostrando panel...'); // Para debug
+                applyPanelVisibility(true);
+                savePanelVisibility(true);
+            });
+        }
+        // Función que deberías llamar cuando termines de inyectar los resultados:
+        function refreshLastModifiedInfo() {
+            const items = Array.from(document.querySelectorAll(".search-result-item"));
+
+            const maxParallel = 5;
+            let running = 0;
+            let index = 0;
+
+            function runNext() {
+                if (running >= maxParallel || index >= items.length)
+                    return;
+
+                const item = items[index++];
+                running++;
+
+                updateItem(item).finally(() => {
+                    running--;
+                    runNext();
+                });
+
+                runNext();
+            }
+
+            runNext();
+        }
+
+        async function updateItem(item) {
+            const repoId = item.dataset.repoid;
+            const path = item.dataset.path;
+
+            const target = item.querySelector(".last-modified");
+            if (!target) return;
+
+            try {
+                const response = await fetch(`/SqlFiles/GetLastCommitInfo?repositoryId=${repoId}&path=${encodeURIComponent(path)}`);
+                const data = await response.json();
+
+                if (!data.ok) {
+                    target.textContent = "—";
+                    return;
+                }
+
+                const date = new Date(data.date).toLocaleString();
+                const avatarBase64 = await obtenerAvatarBase64(data.author, data.email, data.author);
+
+                //const avatar = `https://dev.azure.com/YOURORG/_apis/GraphProfile/MemberAvatars/${encodeURIComponent(data.email)}?size=small`;
+
+                target.innerHTML = `
+                    <span style="display:flex;align-items:center;gap:6px;">
+                        <img src="${avatarBase64}" style="width:22px;height:22px;border-radius:50%;">
+                        <span>${data.author}</span>
+                        <small class="text-muted">${date}</small>
+                    </span>
+                `;
+            }
+            catch (err) {
+                console.error(err);
+                target.textContent = "Error";
+            }
+        }
+        async function obtenerAvatarBase64(directoryAlias, email, displayName) {
+            const response = await fetch(`/api/Handler/imagen-devopsAd?directoryAlias=${encodeURIComponent(directoryAlias)}&email=${encodeURIComponent(email)}&displayName=${encodeURIComponent(displayName)}`);
+
+            if (!response.ok)
+                return null;
+
+            const blob = await response.blob();
+
+            return await blobToBase64(blob);
+        }
+
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);     // convierte a data:image/jpeg;base64,...
+            });
+        }
+    </script>
+}
+

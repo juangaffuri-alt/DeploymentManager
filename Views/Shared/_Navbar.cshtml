@@ -1,0 +1,212 @@
+﻿@inject IHttpContextAccessor _httpContextAccessor
+@inject PasadorScript.Services.AdGroups.IAdGroupService _adGroup
+@{
+    var user = await _adGroup.GetInfoUser();
+    // Obtener el valor de 'q' de la query string
+    var qValue = Context.Request.Query["q"].FirstOrDefault() ?? "";
+}
+<div class="main-header">
+    <!-- Navbar Header -->
+    <nav class="navbar navbar-header navbar-header-transparent navbar-expand-lg border-bottom">
+        @if ((User.Identity?.IsAuthenticated ?? false))
+        {
+            <div class="container-fluid">
+                <nav class="navbar navbar-header-left navbar-expand-lg navbar-form nav-search p-0 d-none d-lg-flex">
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <button type="submit" class="btn btn-search pe-1">
+                                <i class="fa fa-search search-icon"></i>
+                            </button>
+                        </div>
+                        <form asp-controller="Search" asp-action="Resultados" method="get" class="d-flex">
+                            <input class="form-control me-2"
+                                   type="search"
+                                   name="q"
+                                   placeholder="Buscar..."
+                                   aria-label="Buscar"
+                                   value="@qValue">
+                            <!--<button class="btn btn-outline-success" type="submit">Buscar</button>-->
+                        </form>
+                    </div>
+                </nav>
+
+                <ul class="navbar-nav topbar-nav ms-md-auto align-items-center">
+                    <li class="nav-item topbar-icon dropdown hidden-caret d-flex d-lg-none">
+                        <a class="nav-link dropdown-toggle"
+                           data-bs-toggle="dropdown"
+                           href="#"
+                           role="button"
+                           aria-expanded="false"
+                           aria-haspopup="true">
+                            <i class="fa fa-search"></i>
+                        </a>
+                        <ul class="dropdown-menu dropdown-search animated fadeIn">
+                            <form class="navbar-left navbar-form nav-search">
+                                <div class="input-group">
+                                    <input type="text"
+                                           placeholder="Search ..."
+                                           class="form-control" />
+                                </div>
+                            </form>
+                        </ul>
+                    </li>
+
+                    <li class="nav-item topbar-icon dropdown hidden-caret">
+                        <a class="nav-link dropdown-toggle"
+                           href="#"
+                           id="notifDropdown"
+                           role="button"
+                           data-bs-toggle="dropdown"
+                           aria-haspopup="true"
+                           aria-expanded="false">
+                            <i class="fa fa-bell"></i>
+                            <span class="notification">0</span>
+                        </a>
+                        <ul class="dropdown-menu notif-box animated fadeIn"
+                            aria-labelledby="notifDropdown">
+                            <li>
+                                <div class="dropdown-title">
+                                    No hay notificaciones activas
+                                </div>
+                            </li>
+                            <!--
+                                <li>
+                                <div class="notif-scroll scrollbar-outer">
+                                    <div class="notif-center">
+                                        <a href="#">
+                                            <div class="notif-icon notif-primary">
+                                                <i class="fa fa-user-plus"></i>
+                                            </div>
+                                            <div class="notif-content">
+                                                <span class="block"> New user registered </span>
+                                                <span class="time">5 minutes ago</span>
+                                            </div>
+                                        </a>
+                                        <a href="#">
+                                            <div class="notif-icon notif-success">
+                                                <i class="fa fa-comment"></i>
+                                            </div>
+                                            <div class="notif-content">
+                                                <span class="block">
+                                                    Rahmad commented on Admin
+                                                </span>
+                                                <span class="time">12 minutes ago</span>
+                                            </div>
+                                        </a>
+                                        <a href="#">
+                                            <div class="notif-img">
+                                                <img src="~/assets/img/profile2.jpg"
+                                                     alt="Img Profile" />
+                                            </div>
+                                            <div class="notif-content">
+                                                <span class="block">
+                                                    Reza send messages to you
+                                                </span>
+                                                <span class="time">12 minutes ago</span>
+                                            </div>
+                                        </a>
+                                        <a href="#">
+                                            <div class="notif-icon notif-danger">
+                                                <i class="fa fa-heart"></i>
+                                            </div>
+                                            <div class="notif-content">
+                                                <span class="block"> Farrah liked Admin </span>
+                                                <span class="time">17 minutes ago</span>
+                                            </div>
+                                        </a>
+                                    </div>
+                                </div>
+                            </li>
+                            <li>
+                                <a class="see-all" href="javascript:void(0);">
+                                    See all notifications<i class="fa fa-angle-right"></i>
+                                </a>
+                            </li>
+                            -->
+                        </ul>
+                    </li>
+
+                    <li class="nav-item topbar-user dropdown hidden-caret">
+                        <a class="dropdown-toggle profile-pic"
+                           data-bs-toggle="dropdown"
+                           href="#"
+                           aria-expanded="false">
+                            <div class="avatar-sm">
+                                @{
+                                    string imageDataUri = "~/assets/img/profile-picture.png";
+                                 }
+                                @if (user?.Avatar!=null)
+                                {
+                                   string base64String = Convert.ToBase64String(user?.Avatar);
+                                   string mimeType = "image/jpeg"; // Or image/png, image/gif, etc.
+                                   imageDataUri = $"data:{mimeType};base64,{base64String}";
+                                   
+                                }
+                                <img src="@imageDataUri" alt="@user?.Username" class="avatar-img rounded-circle" />
+                            </div>
+                            
+                            <span class="profile-username">
+                                <span class="op-7">Hola</span>
+                                <span class="fw-bold">@user?.FamilyName</span>
+                                <span class="badge badge-success"></span>
+                            </span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-user animated fadeIn">
+                            <div class="dropdown-user-scroll scrollbar-outer">
+                            <li>
+                                <div class="user-box">
+                                    <div class="avatar-lg">
+                                        <img src="@imageDataUri"
+                                             alt="image profile"
+                                             class="avatar-img rounded" />
+                                    </div>
+                                    <div class="u-text">
+                                        <h4>@user?.Username</h4>
+                                        <p class="text-muted">@user?.FullName</p>
+                                        <p class="text-muted">@user?.Email</p>
+                                        <a asp-action="UploadPat" asp-controller="Account" asp-route-returnUrl="/Home/Index"
+                                           class="btn btn-xs btn-secondary btn-sm">Personal access token</a>
+                                    </div>
+                                </div>
+                            </li>
+                            <li>
+                                <form method="post" asp-controller="Account" asp-action="CambiarPerfil">
+                                    <div class="form-group form-group-default">
+                                        <label>Mi perfil</label>
+                                            @foreach (var p in user?.Roles)
+                                            {
+                                                <p>@p.Name</p>
+                                            }
+                                        
+                                    </div>
+                                </form>
+                                <div class="dropdown-divider"></div>
+
+                                <a class="dropdown-item" asp-action="Signout" asp-controller="Account">Logout</a>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        }
+        else
+        {
+            <div class="container-fluid">
+                <ul class="navbar-nav topbar-nav ms-md-auto align-items-center">
+                    <li class="nav-item topbar-user dropdown hidden-caret">
+                        <a class="btn btn-primary btn-round" asp-action="SignIn" asp-controller="Account">Log-In</a>
+                    </li>
+                </ul>
+            </div>
+        }
+    </nav>
+    <!-- End Navbar -->
+</div>
+<script type="text/javascript">
+    function updateDescripcionAndSubmit(selectElement) {
+        const selectedOption = selectElement.options[selectElement.selectedIndex];
+        const descripcion = selectedOption.getAttribute('data-descripcion');
+        document.getElementById('perfilDescripcion').value = descripcion;
+        selectElement.form.submit();
+    }
+</script>

@@ -1,0 +1,310 @@
+﻿@using PasadorScript.DTO.AzureDev
+@using PasadorScript.Models.Reports;
+@using X.PagedList;
+@using X.PagedList.Mvc.Core
+@using X.PagedList.Mvc.Core.Fluent;
+@model PasadorScript.ViewModels.ReleasesFilterViewModel
+
+@{
+    ViewData["Title"] = "Seguimiento de despliegues en Azure DevOps";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/assets/css/IconosGx.css" />
+    <style>
+        .gap-2 {
+            gap: 0.5rem;
+        }
+
+        .badge-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.85em;
+            padding: 4px 8px;
+            border-radius: 12px;
+        }
+    </style>
+}
+
+<form method="get" asp-action="ReleasesReport" id="filterForm">
+    <div class="d-flex align-items-left align-items-md-center flex-column flex-md-row pt-2 pb-4">
+        <div>
+            <h3 class="fw-bold mb-3"><i class="fa fa-rocket"></i> Informe de despliegues</h3>
+            <h6 class="op-7 mb-2">Seguimiento de despliegues en Azure DevOps</h6>
+        </div>
+        <!-- Eliminado el botón duplicado aquí -->
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="card-title">Filtros de búsqueda</h4>
+                    <div class="row gx-2 gy-1">
+                        <!-- Proyecto -->
+                        <div class="col-md-2">
+                            <div class="form-group">
+                                <label class="form-label">Proyecto</label>
+                                <select name="projectName" id="projectName" class="form-control">
+                                    @foreach (var proj in Model.Projects)
+                                    {
+                                        <option value="@proj.ProjectName" selected="@(proj.ProjectName == Model.SelectedProjectName)">
+                                            @proj.DisplayName
+                                        </option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <!-- Release Definition -->
+                        <div class="col-md-2">
+                            <div class="form-group">
+                                <label class="form-label">Release Definition</label>
+                                <select name="definitionId" id="definitionId" class="form-control">
+                                    @foreach (var def in Model.CurrentRepos ?? new List<RepoSetting>())
+                                    {
+                                        <option value="@def.ReleaseDefinitionId" selected="@(def.ReleaseDefinitionId == Model.SelectedDefinitionId)">
+                                            @def.PipelineName
+                                        </option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <!-- Stage -->
+                        <div class="col-md-2">
+                            <div class="form-group">
+                                <label class="form-label">Stage</label>
+                                <select name="stage" id="stage" class="form-control">
+                                    <option value="">Todos</option>
+                                    @foreach (var stage in Model.Stages)
+                                    {
+                                        <option value="@stage" selected="@(stage == Model.SelectedStage)">
+                                            @stage
+                                        </option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <!-- Fecha Desde -->
+                        <div class="col-md-2">
+                            <div class="form-group">
+                                <label class="form-label">Desde</label>
+                                <input type="date" name="fechaDesde" id="fechaDesde" class="form-control"
+                                       value="@Model.FechaDesde?.ToString("yyyy-MM-dd")" />
+                            </div>
+                        </div>
+                        <!-- Fecha Hasta -->
+                        <div class="col-md-2">
+                            <div class="form-group">
+                                <label class="form-label">Hasta</label>
+                                <input type="date" name="fechaHasta" id="fechaHasta" class="form-control"
+                                       value="@Model.FechaHasta?.ToString("yyyy-MM-dd")" />
+                            </div>
+                        </div>
+                        <!-- Cantidad de registros por página y botón filtrar -->
+                        <div class="col-md-1">
+                            <div class="form-group">
+                                <label class="form-label">Reg. x página</label>
+                                <select name="pageSize" id="pageSize" class="form-control">
+                                    <option value="10" selected="@(Model.PageSize == 10)">10</option>
+                                    <option value="20" selected="@(Model.PageSize == 20)">20</option>
+                                    <option value="50" selected="@(Model.PageSize == 50)">50</option>
+                                    <option value="100" selected="@(Model.PageSize == 100)">100</option>
+                                </select>
+                            </div>
+
+                        </div>
+                        <div class="col-md-1 d-flex align-items-end">
+                            <div class="form-group w-100">
+                                <button class="btn btn-primary btn-sm w-100" id="btnBuscar" title="Filtrar">
+                                    <i class="fas fa-search me-1"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover table-compact">
+                            <thead>
+                                <tr>
+                                    <th>Release</th>
+                                    <th>Stage</th>
+                                    <th>Release ID</th>
+                                    <th>Branch</th>
+                                    <th>Deployado por</th>
+                                    <th>Fecha solicitud</th>
+                                </tr>
+                            </thead>
+                            @if (Model.Releases.Any())
+                            {
+                                <tbody>
+                                    @foreach (var item in Model.Releases)
+                                    {
+                                        <tr>
+                                            <td>@item.ReleaseDefinition</td>
+                                            <td>@item.Stage</td>
+                                            <td>
+                                                <a asp-action="ViewStatusByBuild" asp-controller="Release" asp-route-projectName="@Model.SelectedProjectName"
+                                                   asp-route-buildId="@item.Build" asp-route-serviciosGx="@Model.SelectedIsGx"
+                                                   data-bs-toggle="tooltip"
+                                                   title="Ver deploy"
+                                                   class="dropdown-item"
+                                                   data-original-title="Ver deploy">
+                                                    @item.ReleaseName
+                                                </a>
+                                            </td>
+                                            <td><i class="fas fa-globe"></i> @item.Branch.Replace("refs/heads/", "")</td>
+                                            <td>@item.DeployedBy</td>
+                                            <td>@item.QueuedOnLocal.ToString("dd/MM/yyyy, HH:mm")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            }
+                            else
+                            {
+                                <tbody>
+                                    <tr>
+                                        <td colspan="7" class="text-center text-muted">No se han encontrado registros.</td>
+                                    </tr>
+                                </tbody>
+                            }
+                        </table>
+
+                        <!-- Paginación -->
+                        @if (Model.Releases.Any())
+                        {
+                            @Html.PagedListPager(Model.Releases, page => Url.Action("ReleasesReport", new
+                            {
+                                page,
+                                                projectName = Model.SelectedProjectName,
+                                                definitionId = Model.SelectedDefinitionId,
+                                                stage = Model.SelectedStage,
+                                                fechaDesde = Model.FechaDesde?.ToString("yyyy-MM-dd"),
+                                                fechaHasta = Model.FechaHasta?.ToString("yyyy-MM-dd"),
+                                                pageSize = Model.PageSize
+                                                }), new X.PagedList.Mvc.Core.PagedListRenderOptions
+                            {
+                                LiElementClasses = new string[] { "page-item" },
+                                PageClasses = new string[] { "page-link" },
+                                ActiveLiElementClass = "active",
+                                UlElementClasses = new List<string> { "pagination pg-primary" }
+                            })
+                                                }
+                    </div>
+                </div>
+                <div class="card-action">
+                    <div class="btn-group dropdown">
+                        <button class="btn btn-primary dropdown-toggle"
+                                type="button"
+                                data-bs-toggle="dropdown">
+                            Exportar
+                        </button>
+                        <ul class="dropdown-menu" role="menu">
+                            <li>
+                                <button class="dropdown-item btn-approve" id="btnExportExcel">
+                                    <i class="fas fa-file-excel"></i> Excel
+                                </button>
+                                <button class="dropdown-item btn-approve-and-release" id="btnExportPdf">
+                                    <i class="fas fa-file-pdf"></i> PDF
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <a class="btn btn-secondary" href="@ViewBag.ReturnUrl">Volver</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+    <script>
+        // Generar la URL desde Razor
+        var getDefinitionsAndStagesUrl = '@Url.Action("GetDefinitionsAndStages", "Release")';
+        var getStagesUrl = '@Url.Action("GetStages", "Release")';
+        $(document).ready(function () {
+            // Solo actualización dinámica de definiciones y stages, SIN enviar el formulario
+            $('#projectName').change(function () {
+                var projectName = $(this).val();
+                if (!projectName) return;
+
+                $.get(getDefinitionsAndStagesUrl, { projectName: projectName }, function (data) {
+                    var defSelect = $('#definitionId');
+                    defSelect.empty();
+                    if (data.definitions && data.definitions.length) {
+                        $.each(data.definitions, function (i, def) {
+                            defSelect.append($('<option></option>').val(def.definitionId).text(def.pipelineName));
+                        });
+                        defSelect.val(data.definitions[0].definitionId);
+                    } else {
+                        defSelect.append($('<option></option>').val('').text('No hay definiciones'));
+                    }
+                    // Disparar cambio para cargar stages (pero sin submit)
+                    $('#definitionId').trigger('change');
+                }).fail(function () {
+                    console.error('Error cargando definiciones');
+                });
+            });
+
+            $('#definitionId').change(function () {
+                var projectName = $('#projectName').val();
+                var definitionId = $(this).val();
+                if (!projectName || !definitionId) return;
+
+                $.get(getStagesUrl, { projectName: projectName, definitionId: definitionId }, function (stages) {
+                    var stageSelect = $('#stage');
+                    stageSelect.empty();
+                    stageSelect.append($('<option></option>').val('').text('Todos'));
+                    if (stages && stages.length) {
+                        $.each(stages, function (i, stage) {
+                            stageSelect.append($('<option></option>').val(stage).text(stage));
+                        });
+                    }
+                }).fail(function () {
+                    console.error('Error cargando stages');
+                });
+            });
+
+            // Form submit - solo permitir en botones específicos
+            document.getElementById('filterForm').addEventListener('submit', handleFormSubmit);
+
+            function handleFormSubmit(e) {
+                // Solo permitir submit si es uno de los botones de acción válidos
+                const submitter = e.submitter;
+                e.preventDefault();
+                const form = e.target;
+                // Mostrar loading
+                Swal.fire({
+                    title: 'Procesando...',
+                    text: 'Consultando, por favor espera',
+                    allowOutsideClick: false,
+                    showConfirmButton: false,
+                    willOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+
+                form.submit();
+            }
+
+                // Exportación a Excel
+            $('#btnExportExcel').click(function (e) {
+                e.preventDefault();
+                var url = '@Url.Action("ExportToExcel", "Release")?' + $('#filterForm').serialize();
+                window.open(url, '_blank');
+            });
+
+            // Exportación a PDF
+            $('#btnExportPdf').click(function (e) {
+                e.preventDefault();
+                var url = '@Url.Action("ExportToPdf", "Release")?' + $('#filterForm').serialize();
+                window.open(url, '_blank');
+            });
+
+            // NO hay handlers de cambio que envíen el formulario automáticamente.
+            // El único envío es al hacer clic en el botón "Filtrar".
+        });
+    </script>
+}

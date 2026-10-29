@@ -1,0 +1,314 @@
+﻿@model PasadorScript.ViewModels.BuildGXViewModelAndCommitsViewModel
+@inject PasadorScript.Services.AdGroups.IAdGroupService _adGroupService
+@inject PasadorScript.Services.TeamDev.IServiciosTeamDev _serviciosTeamDev
+@{
+    var usr = await _adGroupService.GetInfoUser();
+}
+@section Styles {
+    <link rel="stylesheet" href="~/assets/css/IconosGx.css" />
+}
+
+<div class="page-header">
+    <h3 class="fw-bold mb-3">Aprobar o rechazar Build GX</h3>
+</div>
+
+<!--   Big container   -->
+<form method="post" id="vote-form" asp-controller="GxDeploy" asp-action="Vote">
+    <input type="hidden" asp-for="modelCambio.IdBuildGx" />
+    <input type="hidden" asp-for="modelCambio.IdPr" />
+    <input type="hidden" asp-for="modelCambio.BtRepo" />
+    <div class="container">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-3">
+                                <div class="form-group">
+                                    <label class="form-label" asp-for="modelCambio.IdTipoCambio"></label>
+                                    <div class="selectgroup w-100">
+                                        @{
+                                            var selectList = ViewBag.TiposCambios as SelectList;
+                                        }
+                                        @foreach (var item in selectList)
+                                        {
+                                            <label class="selectgroup-item">
+                                                <input type="radio"
+                                                       value="@item.Value"
+                                                       readonly
+                                                       class="selectgroup-input" asp-for="modelCambio.IdTipoCambio" />
+
+                                                <span class="selectgroup-button" for="tipo_@item.Value">@item.Text</span>
+                                            </label>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="form-group">
+                                    <label asp-for="modelCambio.NroIncidente" class="form-label"></label>
+                                    <p>@Model.modelCambio.NroIncidente</p>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="form-group">
+                                    <label asp-for="modelCambio.BtRepo" class="form-label"></label>
+                                    <p>@Model.modelCambio.BtRepo</p>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="form-group">
+                                    <label asp-for="modelCambio.Usuario" class="form-label"></label>
+                                    <p>@Model.modelCambio.Usuario</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="form-group">
+                                    <label asp-for="modelCambio.Descripcion" class="form-label"></label>
+                                    <p>@Model.modelCambio.Descripcion</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <div class="card-title">Commits desde GX-Server</div>
+
+                                    </div>
+                                    <div class="card-body">
+                                        
+                                        <div id="resultado" class="mt-4"></div>
+                                        <table class="table table-hover mt-4" id="tablaResultados">
+                                            <thead>
+                                                <tr>
+                                                    <th scope="col">#</th>
+                                                    <th scope="col">Usuario</th>
+                                                    <th scope="col">Fecha</th>
+                                                    <th scope="col">Comentarios</th>
+                                                    <th scope="col"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="tablaBody">
+                                                <tr id="filaVacia">
+                                                    <td colspan="5" class="text-center text-muted">No se han encontrado registros.</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-action">
+                        <div class="btn-group dropdown">
+                            <button class="btn btn-primary dropdown-toggle"
+                                    type="button"
+                                    data-bs-toggle="dropdown">
+                                Aprobar
+                            </button>
+                            <ul class="dropdown-menu" role="menu">
+                                <li>
+                                    <button type="button" class="dropdown-item btn-approve" data-vote="10">Aprobar</button>
+                                    <button type="button" class="dropdown-item btn-approve-with-suggestions" data-vote="5">Aprobar con sugerencias</button>
+
+                                </li>
+                            </ul>
+                        </div>
+                        <button type="button" class="btn btn-warning btn-reject" data-vote="-10">Rechazar</button>
+                        <a class="btn btn-secondary" href="@ViewBag.ReturnUrl">Volver</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <input type="hidden" asp-for="Vote" id="Vote" />
+    <input type="hidden" asp-for="Comment" id="Comment" />
+</form>
+<div class="modal fade" id="modalDetalle" tabindex="-1" aria-labelledby="modalDetalleLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalDetalleLabel">Detalles del Commit</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th>
+                            <th>Nombre del Objeto</th>
+                            <th>Descripción</th>
+                            <th style="white-space: nowrap;">Tipo de Objeto</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaDetalleModal">
+                        <!-- Aquí se llenan los detalles dinámicamente -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+@section Scripts {
+    <script>
+
+        let commitsOriginales = []; // aquí se guarda la colección completa
+        const commitsEdicion = @Html.Raw(Json.Serialize(Model.commits));
+
+
+        $(document).ready(function () {
+            if (commitsEdicion && commitsEdicion.length > 0) {
+                for (const item of commitsEdicion) {
+                    item.checked = true;
+                }
+                llenarTablaCommits(commitsEdicion);
+            }
+        });
+
+
+        function llenarTablaCommits(commitsNuevos) {
+            const tablaBody = document.getElementById("tablaBody");
+            tablaBody.innerHTML = "";
+
+            // Actualizar commitsOriginales fusionando con los nuevos
+            for (const nuevo of commitsNuevos) {
+                const rev = nuevo.revision;
+
+                // Si ya existe, solo actualizamos info (pero mantenemos el estado checked)
+                if (!commitsOriginales[rev]) {
+                    commitsOriginales[rev] = nuevo;
+                } else {
+                    commitsOriginales[rev].commit = nuevo; // por si cambió
+                    // mantenemos checked como estaba
+                }
+            }
+
+            // Renderizar
+            for (const rev in commitsOriginales) {
+                const commit = commitsOriginales[rev];
+                const checked = commit.checked ?? false;
+                const tr = document.createElement("tr");
+                var item = commit;
+                tr.innerHTML = `
+                                                                    
+                                                                    <td>${item.revision ?? '-'}</td>
+                                                                    <td>${item.author ?? '-'}</td>
+                                                                    <td>${new Date(item.date).toLocaleString()}</td>
+                                                                    <td>${item.message ?? ''}</td>
+                                                                    <td>
+                                                                        <button type="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#modalDetalle" data-actions='${JSON.stringify(item.actions)}'>
+                                                                            Ver detalles
+                                                                        </button>
+                                                                    </td>
+                                                                `;
+                tablaBody.appendChild(tr);
+            }
+
+            // Evento para actualizar estado al clickear
+            $('.chk-commit').on('change', function () {
+                const revision = parseInt($(this).data('id'));
+                if (commitsOriginales[revision]) {
+                    commitsOriginales[revision].checked = this.checked;
+                }
+            });
+        }
+        
+        //modal
+        // Escuchamos la apertura del modal
+        const modalDetalle = document.getElementById('modalDetalle');
+        modalDetalle.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const actionsJson = button.getAttribute('data-actions');
+
+            const actions = JSON.parse(actionsJson);
+            const tbody = document.getElementById('tablaDetalleModal');
+            tbody.innerHTML = "";
+
+            if (actions.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-muted text-center">Sin acciones.</td></tr>`;
+                return;
+            }
+
+            const iconClassMap = {
+                "Procedure": "bg-ObjectProcedure",
+                "Transaction": "bg-ObjectTransaction",
+                "Table": "bg-ObjectTable",
+                "Web Panel": "bg-ObjectWebpanel",
+                "SDPanel": "bg-ObjectSDPanel",
+                "DataProvider": "bg-ObjectDataProvider",
+                "WorkWithSD": "bg-ObjectWorkWithSD",
+                "Menu": "bg-ObjectMenu",
+                "Dashboard": "bg-ObjectDashboard",
+                "Attribute": "bg-ObjectAttribute"
+                // agregá más si es necesario
+            };
+
+            const statusClassMap = {
+                "Modified": "badge badge-info",
+                "Inserted": "badge badge-success",
+                "Deleted": "badge badge-danger"
+            }
+
+            actions.forEach(action => {
+                const tr = document.createElement("tr");
+                var objectType = action.objectType;
+                var cssClass = iconClassMap[objectType] || "bg-ObjectUnknown"; // default si no se encuentra
+                var icon = `<span class="icon32 ${cssClass}"></span>`;
+                var badge = statusClassMap[action.type];
+                tr.innerHTML = `
+                                            <td><span class='${badge}'>${action.type}</span></td>
+                                            <td>${action.objectName}</td>
+                                            <td>${action.objectDescription}</td>
+                                            <td>${icon}${action.objectType}</td>
+                                        `;
+                tbody.appendChild(tr);
+            });
+        });
+        //commit
+        $(document).ready(function () {
+            // Aprobar directamente (sin comentario)
+            $(".btn-approve").click(function (e) {
+                e.preventDefault();
+                $("#Vote").val($(this).data("vote"));
+                $("#Comment").val(""); // sin motivo
+                $("#vote-form").submit();
+            });
+
+            // Aprobar con sugerencias o Rechazar (requieren comentario)
+            $(".btn-approve-with-suggestions, .btn-reject").click(function (e) {
+                e.preventDefault();
+
+                const vote = $(this).data("vote");
+                const actionText = vote == 5 ? "Aprobar con sugerencias" : "Rechazar";
+
+                Swal.fire({
+                    title: actionText,
+                    input: 'text',
+                    inputPlaceholder: 'Ingrese un motivo',
+                    showCancelButton: true,
+                    confirmButtonText: 'Confirmar',
+                    cancelButtonText: 'Cancelar',
+                    customClass: {
+                        confirmButton: 'btn btn-success',
+                        cancelButton: 'btn btn-danger'
+                    },
+                    buttonsStyling: false
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        const userComment = result.value?.trim();
+                        if (!userComment) {
+                            Swal.fire('El motivo es obligatorio.', '', 'warning');
+                            return;
+                        }
+                        $("#Vote").val(vote);
+                        $("#Comment").val(userComment);
+                        $("#vote-form").submit();
+                    }
+                });
+            });
+        });
+    </script>
+}

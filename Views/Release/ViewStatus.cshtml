@@ -1,0 +1,1424 @@
+﻿@using System.Text.Encodings.Web
+@using PasadorScript.Services.Release
+@model PasadorScript.DTO.AzureDev.ReleaseDto
+@section Styles {
+    <style>
+        .task-selected {
+            background-color: #e3f2fd !important;
+            border-left: 3px solid #2196f3 !important;
+        }
+
+        .cursor-pointer {
+            cursor: pointer !important;
+        }
+
+        .modal-fullscreen .modal-body {
+            height: calc(100vh - 120px);
+        }
+
+        #tasksList .task-item:last-child {
+            border-bottom: none !important;
+        }
+
+        .task-name {
+            word-break: break-word;
+        }
+
+        /* Estilos para los badges dinámicos */
+        .environment-status-badge {
+            transition: all 0.3s ease;
+        }
+
+        /* Clases para los diferentes estados */
+        .bg-success {
+            background-color: #28a745 !important;
+        }
+
+        .bg-warning {
+            background-color: #ffc107 !important;
+            color: #212529 !important;
+        }
+
+        .bg-danger {
+            background-color: #dc3545 !important;
+        }
+
+        .bg-secondary {
+            background-color: #6c757d !important;
+        }
+
+        .bg-info {
+            background-color: #17a2b8 !important;
+        }
+
+        .bg-primary {
+            background-color: #007bff !important;
+        }
+
+        /* Animación para cambios de estado */
+        @@keyframes badgePulse {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.1);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .badge-updated {
+            animation: badgePulse 0.5s ease-in-out;
+        }
+        /* Agregar estos estilos al final de la sección <style> */
+        .environment-status-badge {
+            transition: all 0.3s ease;
+            font-size: 0.85rem;
+            padding: 0.35rem 0.65rem;
+        }
+
+        /* Animación personalizada para cambios de estado */
+        @@keyframes badgeChange {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.1);
+                box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .badge-change-animation {
+            animation: badgeChange 0.5s ease-in-out;
+        }
+
+        /* Animaciones para estados específicos */
+        .status-inprogress {
+            position: relative;
+        }
+
+            .status-inprogress::after {
+                content: '';
+                position: absolute;
+                top: -2px;
+                left: -2px;
+                right: -2px;
+                bottom: -2px;
+                border-radius: 0.375rem;
+                background: linear-gradient(45deg, #007bff, #00bfff, #007bff);
+                background-size: 400% 400%;
+                animation: gradientFlow 3s ease infinite;
+                z-index: -1;
+            }
+
+        @@keyframes gradientFlow {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        /* Estilos para iconos en badges */
+        .badge i {
+            font-size: 0.8em;
+            vertical-align: middle;
+        }
+
+        /* Estado éxito con brillo sutil */
+        .bg-success {
+            box-shadow: 0 2px 5px rgba(40, 167, 69, 0.3);
+        }
+
+        /* Estado warning con brillo */
+        .bg-warning {
+            color: #212529 !important;
+            box-shadow: 0 2px 5px rgba(255, 193, 7, 0.3);
+        }
+
+        /* Estado danger con brillo */
+        .bg-danger {
+            box-shadow: 0 2px 5px rgba(220, 53, 69, 0.3);
+        }
+
+        /* Estado primary con brillo */
+        .bg-primary {
+            box-shadow: 0 2px 5px rgba(0, 123, 255, 0.3);
+        }
+    </style>
+}
+@{
+    ViewData["Title"] = "Release";
+    var forGx = Model.ForGenexus ? "S" : "N";
+    var aprobacionesPorStage = ViewData[IResolucionAprobacionRelease.ViewDataKey] as IReadOnlyDictionary<int, ResolucionStage>
+        ?? new Dictionary<int, ResolucionStage>();
+}
+
+@{
+    var alertStatus = new List<string>() { "pending", "inProgress" };
+    var logueableStatus = new List<string>() { "succeeded", "failed", "canceled", "rejected" };
+    var pendientes = Model.Environments
+    .Where(e => alertStatus.Contains(e.Status))
+    .Select(e => e.Name)
+    .ToList();
+    <!-- Alert dinámico para aprobaciones pendientes -->
+    <div class="row">
+        <div class="col-12">
+            <div class="row" id="pendingApprovalsContainer">
+                <!-- El contenido se generará dinámicamente aquí -->
+            </div>
+        </div>
+    </div>
+}
+
+<div class="container-fluid">
+    <!-- Header del PR -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2>
+                        <i class="fas fa-rocket me-2"></i>
+                        Deploy
+                        <!-- Badge de estado dinámico -->
+                        <span id="releaseStatusBadge" class="badge ms-2 @Model.Environments.FirstOrDefault()?.StatusBadgeLabel">
+                            @Model.Environments.FirstOrDefault()?.StatusLabel
+                        </span>
+                        @if (Model.IsHotfix == true)
+                        {
+                            <span class="badge badge-danger ms-2" title="Eventual excepción de QA">
+                                <i class="fas fa-bolt me-1" aria-hidden="true"></i>Hotfix
+                            </span>
+                        }
+                        else if (Model.IsHotfix == false)
+                        {
+                            <span class="badge badge-secondary ms-2">No hotfix</span>
+                        }
+                    </h2>
+                    <p class="text-muted mb-0">
+                        <strong>@Model.Name</strong> - <span class="badge bg-secondary">@Model.PullRequestObject.Repository.Name</span>
+                    </p>
+                    <!-- Indicador de actualización automática -->
+                    <small class="text-muted" id="lastUpdated">
+                        <i class="fas fa-sync-alt fa-spin"></i> Actualizando...
+                    </small>
+                </div>
+
+                <div>
+                    <a href="@ViewBag.ReturnUrl">
+                        <i class="fas fa-arrow-left me-2"></i>Volver
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+    <div class="row mt-4">
+        <!-- Columna izquierda - Información principal -->
+        <div class="col-md-8">
+            <!-- Descripción -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-file-alt"></i> Descripción
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted fst-italic">@Model.PullRequestObject.Description</p>
+                </div>
+            </div>
+            <!-- Enlaces rápidos -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-history"></i> Timeline
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <a href="@Url.Action("Auditoria", new { releaseId = Model.Id, pullRequestId = Model.PullRequest, projectType = Model.AzureProjectType })"
+                       class="btn btn-sm btn-info">
+                        <i class="fas fa-history me-2"></i>Ver Auditoría
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna derecha - Metadatos -->
+        <div class="col-md-4">
+            <!-- Información del Autor -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-user"></i> Creado por
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        @if (!string.IsNullOrEmpty(Model.CreatedBy.ImageUrl))
+                        {
+                            var imgsrc = $"/api/Handler/imagen-devops?url={UrlEncoder.Default.Encode(Model.CreatedBy.ImageUrl)}";
+                            <img src="@imgsrc"
+                                 alt="@Model.CreatedBy.DisplayName"
+                                 class="rounded-circle me-3"
+                                 width="48"
+                                 height="48">
+                        }
+                        <div>
+                            <h6 class="mb-1">@Model.CreatedBy.DisplayName</h6>
+                            <p class="text-muted mb-0 small">@Model.CreatedBy.UniqueName</p>
+                            <small class="text-muted">
+                                <i class="fas fa-calendar"></i>
+                                @Model.CreatedOnArgentinaString
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Actualización de stages (deployment)</h4>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-4 justify-content-start">
+                    @foreach (var env in Model.Environments)
+                    {
+                        <div class="d-flex flex-column align-items-center" id="environment-@env.Id" data-environment-id="@env.Id">
+                            <div class="d-flex gap-3 align-items-start shadow rounded-3 px-4 py-3">
+
+                                <!-- Pre-Approvals -->
+                                <div class="d-flex flex-column align-items-center">
+                                    @foreach (var defined in env.PreApprovedDefinition)
+                                    {
+                                        var actual = env.PreDeployApprovals.FirstOrDefault(a => a.Approver.Id == defined.Approver.Id);
+                                        var displayName = $"{defined.Approver.DisplayName}";
+                                        var avatarUrl = actual?.ApprovedBy?.ImageUrl ?? defined.Approver.ImageUrl;
+                                        var userName = actual?.ApprovedBy?.DisplayName ?? "";
+                                        var encodedUrl = UrlEncoder.Default.Encode(avatarUrl);
+                                        var imgSrc = $"/api/Handler/imagen-devops?url={encodedUrl}";
+                                        var status = actual?.Status?.ToLower() ?? "pending";
+
+                                        var borderClass = status switch
+                                        {
+                                            "approved" => "border-success",
+                                            "rejected" => "border-danger",
+                                            "pending" => "border-secondary",
+                                            _ => "border-light"
+                                        };
+
+                                        var iconClass2 = status switch
+                                        {
+                                            "approved" => "fa fa-check text-success",
+                                            "rejected" => "fa fa-times text-danger",
+                                            "pending" => "fa fa-clock text-secondary",
+                                            _ => "fa fa-question text-muted"
+                                        };
+
+                                        var title = $"{displayName} - {status}";
+                                        if (!String.IsNullOrEmpty(userName))
+                                        {
+                                            title = $"{userName} como miembro de {displayName} - {status}";
+                                        }
+
+                                        <div class="position-relative mb-2" title="@title">
+                                            <img src="@imgSrc"
+                                                 class="rounded-circle border @borderClass shadow"
+                                                 style="width: 38px; height: 38px;" />
+                                            <i class="@iconClass2 position-absolute bottom-0 end-0 bg-white rounded-circle p-1 shadow"
+                                               style="font-size: 0.65rem; transform: translate(25%, 25%);"></i>
+                                        </div>
+                                    }
+                                </div>
+
+                                <!-- Environment card -->
+                                <div class="card border shadow rounded-3 px-4 py-3" style="min-width: 240px;">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="mb-0">
+                                            <span class="environment-name">@env.Name</span>
+                                            @if (env.Attempt > 1)
+                                            {
+                                                <small class="text-muted ms-2">(Attempt #<span class="attempt-number">@env.Attempt</span>)</small>
+                                            }
+                                        </h6>
+                                        <!-- Badge dinámico - usar Html.Raw para clases CSS -->
+                                        <span id="badge-@env.Id" class="@Html.Raw(env.StatusBadgeLabel) text-capitalize environment-status-badge">
+                                            @{
+                                                // Determinar icono según estado
+                                                var iconClass = env.Status switch
+                                                {
+                                                    "succeeded" => "fa-check-circle",
+                                                    "inProgress" => "fa-spinner fa-spin",
+                                                    "pending" => "fa-clock",
+                                                    "failed" => "fa-times-circle",
+                                                    "canceled" => "fa-ban",
+                                                    "rejected" => "fa-times",
+                                                    "notStarted" => "fa-hourglass-start",
+                                                    "partiallySucceeded" => "fa-exclamation-circle",
+                                                    _ => "fa-question-circle"
+                                                };
+
+                                                var animationClass = env.Status switch
+                                                {
+                                                    "inProgress" => "animate__animated animate__pulse animate__infinite",
+                                                    "pending" => "animate__animated animate__pulse",
+                                                    "failed" => "animate__animated animate__shakeX",
+                                                    "rejected" => "animate__animated animate__headShake",
+                                                    _ => "animate__animated animate__fadeIn"
+                                                };
+                                            }
+                                            <i class="fa @iconClass me-1 @animationClass"></i>@env.StatusLabel
+                                        </span>
+                                    </div>
+                                    @if (env.ModifiedOn.HasValue)
+                                    {
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <p class="text text-small">
+                                                Últ.Act.: <span class="last-modified">@env.ModifiedOnArgentina!.Value.ToString("dd-MM-yyyy HH:mm:ss")</span>
+                                            </p>
+                                        </div>
+                                    }
+
+                                    <!-- Contenedor dinámico para botones -->
+                                    <div id="actions-@env.Id" class="mt-3 d-flex flex-column gap-2">
+                                        @if (alertStatus.Contains(env.Status) || (env.Status == "inProgress" && env.PostDeployApprovals.Any(a => a.Status == "pending")))
+                                        {
+                                            var preUserApprovals = env.PreDeployApprovals
+                                            .Where(a => a.Status == "pending")
+                                            .ToList();
+
+                                            aprobacionesPorStage.TryGetValue(env.Id, out var stageResuelto);
+                                            var permitidas = stageResuelto?.Aprobaciones ?? Array.Empty<AprobacionResuelta>();
+
+                                            <div class="d-flex justify-content-center gap-2">
+                                                @if (permitidas.Count == 1)
+                                                {
+                                                    var unica = permitidas[0];
+                                                    var incluyeSinPrueba = stageResuelto!.IncluyeSinPrueba;
+                                                    <button type="button"
+                                                            class="btn btn-success btn-sm"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#modalAprobar"
+                                                            data-modo="una"
+                                                            data-sin-prueba="@(incluyeSinPrueba ? "true" : "false")"
+                                                            data-approval-id="@unica.Id"
+                                                            data-descriptor="@unica.Descriptor"
+                                                            data-release-id="@Model.Id">
+                                                        Aprobar @(unica.EsPosterior ? "(Post)" : "")
+                                                    </button>
+                                                    <button type="button"
+                                                            class="btn btn-danger btn-sm"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#modalRechazar"
+                                                            data-modo="una"
+                                                            data-approval-id="@unica.Id"
+                                                            data-descriptor="@unica.Descriptor"
+                                                            data-release-id="@Model.Id">
+                                                        Rechazar
+                                                    </button>
+                                                }
+                                                else if (permitidas.Count > 1)
+                                                {
+                                                    var lista = System.Text.Json.JsonSerializer.Serialize(
+                                                        permitidas.Select(a => new { id = a.Id, displayName = a.DisplayName, isPost = a.EsPosterior, descriptor = a.Descriptor }));
+                                                    var incluyeSinPrueba = stageResuelto!.IncluyeSinPrueba;
+                                                    <button type="button"
+                                                            class="btn btn-primary btn-sm"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#modalAprobar"
+                                                            data-modo="varias"
+                                                            data-sin-prueba="@(incluyeSinPrueba ? "true" : "false")"
+                                                            data-release-id="@Model.Id"
+                                                            data-approvals="@lista">
+                                                        Aprobar
+                                                    </button>
+                                                    <button type="button"
+                                                            class="btn btn-danger btn-sm"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#modalRechazar"
+                                                            data-modo="varias"
+                                                            data-approvals="@lista"
+                                                            data-release-id="@Model.Id">
+                                                        Rechazar
+                                                    </button>
+                                                }
+                                            </div>
+                                            <!-- Acciones para En Progreso -->
+                                            @if ((env.Status == "inProgress" || env.Status == "queued") && !preUserApprovals.Any())
+                                            {
+                                                <div class="mt-3 d-flex gap-2 justify-content-center">
+                                                    <form method="post" asp-controller="Release" asp-action="CancelarRelease" class="d-inline">
+                                                        <input type="hidden" name="forGenexus" value="@forGx" />
+                                                        <input type="hidden" name="releaseId" value="@Model.Id" />
+                                                        <input type="hidden" name="environmentId" value="@env.Id" />
+                                                        <input type="hidden" name="environmentName" value="@env.Name" />
+                                                        <input type="hidden" name="comentario" value="Cancelado desde app web" />
+                                                        <input type="hidden" name="pullRequestId" value="@Model.PullRequest" />
+                                                        <input type="hidden" name="projectType" value="@Model.AzureProjectType" />
+                                                        <button type="submit" class="btn btn-warning btn-sm">Cancelar</button>
+                                                    </form>
+                                                    <button type="button"
+                                                            class="btn btn-secondary btn-sm logClass"
+                                                            data-release-id="@Model.Id"
+                                                            data-projectType="@Model.AzureProjectType"
+                                                            data-environment-id="@env.Id">
+                                                        Ver Logs
+                                                    </button>
+                                                </div>
+                                            }
+                                        }
+                                        else if (logueableStatus.Contains(env.Status)) // redeploy
+                                        {
+                                            <div class="mt-3 d-flex gap-2 justify-content-center">
+                                                <form method="post" asp-controller="Release" asp-action="ReDeploy" class="d-inline">
+                                                    <input type="hidden" name="forGenexus" value="@forGx" />
+                                                    <input type="hidden" name="releaseId" value="@Model.Id" />
+                                                    <input type="hidden" name="environmentId" value="@env.Id" />
+                                                    <input type="hidden" name="comentario" value="Redeploy desde app web" />
+                                                    <input type="hidden" name="pullRequestId" value="@Model.PullRequest" />
+                                                    <input type="hidden" name="projectType" value="@Model.AzureProjectType" />
+                                                    <button type="submit" class="btn btn-primary btn-sm">Re-Deploy</button>
+                                                </form>
+                                                <button type="button"
+                                                        class="btn btn-secondary btn-sm logClass"
+                                                        data-release-id="@Model.Id"
+                                                        data-environment-id="@env.Id"
+                                                        data-projectType="@Model.AzureProjectType"
+                                                        data-forGenexus="@Model.ForGenexus">
+                                                    Logs
+                                                </button>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+
+                                <!-- Post-Approvals -->
+                                <div class="d-flex flex-column align-items-center">
+                                    @foreach (var defined in env.PostApprovedDefinition)
+                                    {
+                                        var actual = env.PostDeployApprovals.FirstOrDefault(a => a.Approver.Id == defined.Approver.Id);
+                                        var displayName = defined.Approver.DisplayName;
+                                        var avatarUrl = actual?.ApprovedBy?.ImageUrl ?? defined.Approver.ImageUrl;
+                                        var status = actual?.Status?.ToLower() ?? "pending";
+                                        var encodedUrl = UrlEncoder.Default.Encode(avatarUrl);
+                                        var imgSrc = $"/api/Handler/imagen-devops?url={encodedUrl}";
+                                        var userName = actual?.ApprovedBy?.DisplayName ?? "";
+                                        var borderClass = status switch
+                                        {
+                                            "approved" => "border-success",
+                                            "rejected" => "border-danger",
+                                            "pending" => "border-secondary",
+                                            _ => "border-light"
+                                        };
+
+                                        var iconClass2 = status switch
+                                        {
+                                            "approved" => "fa fa-check text-success",
+                                            "rejected" => "fa fa-times text-danger",
+                                            "pending" => "fa fa-clock text-secondary",
+                                            _ => "fa fa-question text-muted"
+                                        };
+                                        var title = $"{displayName} - {status}";
+                                        if (!String.IsNullOrEmpty(userName))
+                                        {
+                                            title = $"{userName} como miembro de {displayName} - {status}";
+                                        }
+
+                                        <div class="position-relative mb-2" title="@title">
+                                            <img src="@imgSrc"
+                                                 class="rounded-circle border @borderClass shadow"
+                                                 style="width: 38px; height: 38px;" />
+                                            <i class="@iconClass2 position-absolute bottom-0 end-0 bg-white rounded-circle p-1 shadow"
+                                               style="font-size: 0.65rem; transform: translate(25%, 25%);"></i>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalAprobar" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="post" asp-controller="Release" asp-action="ActualizarApproval" id="formAprobar">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="tituloAprobar">Confirmar aprobación</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="releaseId" id="aprobarReleaseId" />
+                    <input type="hidden" name="approvalId" id="aprobarApprovalId" />
+                    <input type="hidden" name="descriptorGroup" id="aprobarDescriptor" />
+                    <input type="hidden" name="action" value="Approve" />
+                    <input type="hidden" name="pullRequestId" value="@Model.PullRequest" />
+                    <input type="hidden" name="projectType" value="@Model.AzureProjectType" />
+                    <p id="textoConfirmacionAprobar" class="mb-0">¿Está seguro que desea realizar el cambio?</p>
+                    <div id="bloqueSinPrueba" class="d-none">
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="checkSinPrueba" />
+                            <label class="form-check-label" for="checkSinPrueba">Validación Acotada</label>
+                        </div>
+                        <div class="mb-3">
+                            <label for="comentarioAprobacion" class="form-label">Comentario</label>
+                            <textarea class="form-control" name="comentario" id="comentarioAprobacion" rows="3"></textarea>
+                            <div class="invalid-feedback">Si marcás Validación Acotada, el comentario es obligatorio.</div>
+                        </div>
+                        <input type="hidden" id="inputSinPrueba" value="0" />
+                    </div>
+                    <div id="contenedor-opciones-aprobacion"></div>
+                </div>
+                <div class="modal-footer" id="footerAprobarUna">
+                    <button type="submit" class="btn btn-success">Aprobar</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="modalRechazar" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="post" asp-controller="Release" asp-action="ActualizarApproval" id="formRechazar">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="tituloRechazar">Motivo del rechazo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="approvalId" id="rechazarApprovalId" />
+                    <input type="hidden" name="releaseId" id="rechazarReleaseId" />
+                    <input type="hidden" name="descriptorGroup" id="rechazarDescriptor" />
+                    <input type="hidden" name="pullRequestId" value="@Model.PullRequest" />
+                    <input type="hidden" name="projectType" value="@Model.AzureProjectType" />
+                    <input type="hidden" name="action" value="Reject" />
+                    <div class="mb-3">
+                        <label for="comentarioRechazo" class="form-label">Comentario</label>
+                        <textarea class="form-control" name="comentario" id="comentarioRechazo" rows="3" required></textarea>
+                    </div>
+                    <div id="contenedor-opciones-rechazo"></div>
+                </div>
+                <div class="modal-footer" id="footerRechazarUna">
+                    <button type="submit" class="btn btn-danger">Rechazar</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal para logs -->
+<div class="modal fade" id="logModal" tabindex="-1" aria-labelledby="logModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="logModalLabel">
+                    <i class="fa fa-file-text-o me-2"></i>
+                    Release Logs - <span id="modalReleaseInfo"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="row g-0 h-100">
+                    <!-- Panel izquierdo: Lista de tareas -->
+                    <div class="col-md-4 border-end">
+                        <div class="p-3 border-bottom bg-light">
+                            <h6 class="mb-0">
+                                <i class="fa fa-tasks me-2"></i>
+                                Tareas del Deployment
+                            </h6>
+                        </div>
+                        <div id="tasksList" style="height: calc(100vh - 200px); overflow-y: auto;">
+                            <div class="p-4 text-center text-muted">
+                                <i class="fa fa-spinner fa-spin fa-2x mb-3"></i>
+                                <div>Cargando tareas...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel derecho: Editor de logs -->
+                    <div class="col-md-8">
+                        <div class="p-3 border-bottom bg-light">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">
+                                    <i class="fa fa-file-code-o me-2"></i>
+                                    <span id="selectedTaskName">Selecciona una tarea para ver sus logs</span>
+                                </h6>
+                                <div>
+                                    <button id="refreshLogBtn" class="btn btn-sm btn-outline-primary" style="display: none;">
+                                        <i class="fa fa-refresh me-1"></i> Actualizar
+                                    </button>
+                                    <button id="copyLogBtn" class="btn btn-sm btn-outline-secondary ms-2" style="display: none;">
+                                        <i class="fa fa-copy me-1"></i> Copiar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="editor" style="height: calc(100vh - 200px); width: 100%;">
+                            <div class="p-4 text-center text-muted h-100 d-flex align-items-center justify-content-center">
+                                <div>
+                                    <i class="fa fa-mouse-pointer fa-2x mb-3"></i>
+                                    <div>Selecciona una tarea del panel izquierdo para ver sus logs</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="me-auto">
+                    <small class="text-muted">
+                        <i class="fa fa-info-circle me-1"></i>
+                        Haz clic en cualquier tarea para ver sus logs detallados
+                    </small>
+                </div>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fa fa-times me-1"></i> Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/ace.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/mode-text.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/theme-monokai.js"></script>
+    <script>
+        // Variables globales para el manejo de logs
+        let currentReleaseId = null;
+        let currentEnvironmentId = null;
+        let currentFromGenexus = false;
+        let currentProject = '@Model.AzureProjectType';
+        let currentTaskId = null;
+        let tasksData = null;
+
+        // Configurar el editor ACE
+        const editor = ace.edit("editor");
+        editor.setTheme("ace/theme/monokai");
+        editor.session.setMode("ace/mode/text");
+        editor.setReadOnly(true);
+
+        // Función para formatear logs
+        function formatLog(log) {
+            return log
+                .split(/\r?\n/)
+                .map(line => {
+                    line = line.replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z\s*/, '');
+                    if (line.startsWith('##[section]Starting:')) return `\n=== ${line.replace('##[section]Starting:', '').trim()} ===`;
+                    if (line.startsWith('##[command]')) return '';
+                    if (line.startsWith('##[')) return '';
+                    if (line.trim().startsWith('-Command')) return '';
+                    if (/^=+$/.test(line.trim())) return '';
+                    return line;
+                })
+                .filter(line => line.trim() !== '')
+                .join('\n');
+        }
+
+        // Función para cargar las tareas
+        function loadTasks(releaseId, environmentId, projectType) {
+            const tasksList = document.getElementById('tasksList');
+
+            // Mostrar loading en el panel de tareas
+            tasksList.innerHTML = `
+                <div class="p-4 text-center text-muted">
+                    <i class="fa fa-spinner fa-spin fa-2x mb-3"></i>
+                    <div>Cargando tareas...</div>
+                </div>
+            `;
+
+            fetch(`/Release/GetReleaseTasksAndLogs?idRelease=${releaseId}&environmentId=${environmentId}&projectType=${projectType}`)
+                .then(response => response.json())
+                .then(result => {
+                    if (!result.success) {
+                        throw new Error(result.message);
+                    }
+
+                    tasksData = result.data;
+
+                    // Actualizar el título del modal
+                    document.getElementById('modalReleaseInfo').textContent =
+                        `${result.data.releaseName} - ${result.data.environmentName}`;
+
+                    // Renderizar tareas (esto automáticamente seleccionará la primera)
+                    renderTasks(result.data.tasks);
+                })
+                .catch(error => {
+                    console.error('Error loading tasks:', error);
+                    tasksList.innerHTML = `
+                        <div class="p-4 text-center text-danger">
+                            <i class="fa fa-exclamation-triangle fa-2x mb-3"></i>
+                            <div>Error al cargar las tareas:</div>
+                            <small>${error.message}</small>
+                        </div>
+                    `;
+
+                    // Mostrar error en el panel derecho
+                    document.getElementById('selectedTaskName').textContent = 'Error al cargar tareas';
+                    editor.session.setValue(`Error al cargar las tareas:\n${error.message}`);
+                });
+        }
+
+        // Función para renderizar la lista de tareas
+        function renderTasks(tasks) {
+            const tasksList = document.getElementById('tasksList');
+
+            if (!tasks || tasks.length === 0) {
+                tasksList.innerHTML = `
+                    <div class="p-4 text-center text-muted">
+                        <i class="fa fa-inbox fa-2x mb-3"></i>
+                        <div>No se encontraron tareas</div>
+                    </div>
+                `;
+                // Resetear panel derecho si no hay tareas
+                document.getElementById('selectedTaskName').textContent = 'No hay tareas disponibles';
+                editor.session.setValue('No se encontraron tareas para mostrar.');
+                return;
+            }
+
+            const tasksHtml = tasks.map(task => `
+                <div class="task-item border-bottom p-3 ${task.hasLog ? 'cursor-pointer' : ''}"
+                     data-task-id="${task.id}"
+                     data-has-log="${task.hasLog}"
+                     style="${task.hasLog ? 'cursor: pointer;' : 'cursor: default; opacity: 0.6;'}">
+                    <div class="d-flex align-items-start">
+                        <div class="me-3 pt-1">
+                            <i class="${task.statusIconClass}"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h6 class="mb-0 task-name">${task.name}</h6>
+                                <span class="${task.statusBadgeClass}">${task.statusLabel}</span>
+                            </div>
+                            <div class="small text-muted">
+                                ${task.startTime ? `
+                                    <div><i class="fa fa-play me-1"></i> ${new Date(task.startTime).toLocaleString()}</div>
+                                ` : ''}
+                                ${task.finishTime ? `
+                                    <div><i class="fa fa-stop me-1"></i> ${new Date(task.finishTime).toLocaleString()}</div>
+                                ` : ''}
+                                ${task.durationText !== '--' ? `
+                                    <div><i class="fa fa-clock-o me-1"></i> Duración: ${task.durationText}</div>
+                                ` : ''}
+                                ${!task.hasLog ? `
+                                    <div class="text-warning"><i class="fa fa-exclamation-triangle me-1"></i> Sin logs disponibles</div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            tasksList.innerHTML = tasksHtml;
+
+            // Agregar event listeners a las tareas con logs
+            document.querySelectorAll('.task-item[data-has-log="true"]').forEach(taskItem => {
+                taskItem.addEventListener('click', function () {
+                    const taskId = parseInt(this.getAttribute('data-task-id'));
+                    selectTask(taskId);
+                });
+
+                // Efecto hover
+                taskItem.addEventListener('mouseenter', function () {
+                    if (!this.classList.contains('task-selected')) {
+                        this.style.backgroundColor = '#f8f9fa';
+                    }
+                });
+                taskItem.addEventListener('mouseleave', function () {
+                    if (!this.classList.contains('task-selected')) {
+                        this.style.backgroundColor = '';
+                    }
+                });
+            });
+
+            // Seleccionar automáticamente la primera tarea con logs
+            const firstTaskWithLog = tasks.find(task => task.hasLog);
+            if (firstTaskWithLog) {
+                // Usar setTimeout para asegurar que el DOM esté completamente renderizado
+                setTimeout(() => {
+                    selectTask(firstTaskWithLog.id);
+                }, 100);
+            } else {
+                // Si no hay tareas con logs, mostrar mensaje apropiado
+                document.getElementById('selectedTaskName').textContent = 'No hay tareas con logs disponibles';
+                editor.session.setValue('No se encontraron tareas con logs para mostrar.');
+            }
+        }
+
+        // Función para seleccionar una tarea y cargar su log
+        function selectTask(taskId) {
+            // Remover selección anterior
+            document.querySelectorAll('.task-item').forEach(item => {
+                item.classList.remove('task-selected');
+                if (!item.matches(':hover')) {
+                    item.style.backgroundColor = '';
+                }
+            });
+
+            // Agregar selección a la tarea actual
+            const taskItem = document.querySelector(`[data-task-id="${taskId}"]`);
+            if (taskItem) {
+                taskItem.classList.add('task-selected');
+                taskItem.style.backgroundColor = '#e3f2fd';
+            }
+
+            // Encontrar la tarea en los datos
+            const task = tasksData?.tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            currentTaskId = taskId;
+
+            // Actualizar el título del panel de logs
+            document.getElementById('selectedTaskName').textContent = task.name;
+
+            // Mostrar botones de acción
+            document.getElementById('refreshLogBtn').style.display = 'inline-block';
+            document.getElementById('copyLogBtn').style.display = 'inline-block';
+
+            // Cargar el log
+            loadTaskLog(taskId);
+        }
+
+        // Función para cargar el log de una tarea específica
+        function loadTaskLog(taskId) {
+            editor.session.setValue("Cargando log...");
+
+            fetch(`/Release/GetTaskLog?idRelease=${currentReleaseId}&environmentId=${currentEnvironmentId}&taskId=${taskId}&projectType=${currentProject}`)
+                .then(response => response.json())
+                .then(result => {
+                    if (!result.success) {
+                        throw new Error(result.message);
+                    }
+
+                    const formattedLog = formatLog(result.log);
+                    editor.session.setValue(formattedLog);
+                })
+                .catch(error => {
+                    console.error('Error loading task log:', error);
+                    editor.session.setValue(`Error al cargar el log:\n${error.message}`);
+                });
+        }
+
+        // Función para resetear completamente el modal
+        function resetModal() {
+            // Limpiar variables globales
+            currentTaskId = null;
+            tasksData = null;
+
+            // Resetear título del modal
+            document.getElementById('modalReleaseInfo').textContent = 'Cargando...';
+
+            // Resetear panel de tareas
+            const tasksList = document.getElementById('tasksList');
+            tasksList.innerHTML = `
+                <div class="p-4 text-center text-muted">
+                    <i class="fa fa-spinner fa-spin fa-2x mb-3"></i>
+                    <div>Cargando tareas...</div>
+                </div>
+            `;
+
+            // Resetear panel de logs
+            document.getElementById('selectedTaskName').textContent = 'Cargando...';
+            document.getElementById('refreshLogBtn').style.display = 'none';
+            document.getElementById('copyLogBtn').style.display = 'none';
+
+            // Limpiar editor y mostrar mensaje de carga
+            editor.session.setValue('Cargando datos...');
+        }
+
+        // Event listener para los botones de log
+        document.querySelectorAll('.logClass').forEach(btn => {
+            btn.addEventListener('click', function () {
+                currentReleaseId = parseInt(this.getAttribute('data-release-id'));
+                currentEnvironmentId = parseInt(this.getAttribute('data-environment-id'));
+                currentPoject = this.getAttribute('data-projectType');
+
+                // Mostrar el modal primero
+                const modal = new bootstrap.Modal(document.getElementById('logModal'));
+                modal.show();
+
+                // Resetear completamente el modal
+                resetModal();
+
+                // Cargar las tareas
+        loadTasks(currentReleaseId, currentEnvironmentId, currentPoject);
+            });
+        });
+
+        // Event listener para actualizar log
+        document.getElementById('refreshLogBtn').addEventListener('click', function () {
+            if (currentTaskId) {
+                loadTaskLog(currentTaskId);
+            }
+        });
+
+        // Event listener para copiar log
+        document.getElementById('copyLogBtn').addEventListener('click', function () {
+            const logContent = editor.session.getValue();
+            navigator.clipboard.writeText(logContent).then(() => {
+                // Mostrar feedback
+                this.innerHTML = '<i class="fa fa-check me-1"></i> Copiado!';
+                setTimeout(() => {
+                    this.innerHTML = '<i class="fa fa-copy me-1"></i> Copiar';
+                }, 2000);
+            }).catch(err => {
+                console.error('Error copying to clipboard:', err);
+            });
+        });
+
+        // Limpiar estado al cerrar el modal
+        document.getElementById('logModal').addEventListener('hidden.bs.modal', function () {
+            // Limpiar completamente al cerrar
+            resetModal();
+
+            // Limpiar variables globales
+            currentReleaseId = null;
+            currentEnvironmentId = null;
+            currentFromGenexus = false;
+            currentTaskId = null;
+            tasksData = null;
+        });
+
+        // También limpiar cuando se está abriendo el modal (antes de mostrar)
+        document.getElementById('logModal').addEventListener('show.bs.modal', function () {
+            // Limpiar antes de mostrar para evitar contenido residual
+            resetModal();
+        });
+
+        // ========== CÓDIGO PARA ACTUALIZACIÓN AUTOMÁTICA DE BADGES ==========
+
+        // Variables para el polling
+        let pollInterval;
+        let currentReleaseIdPoll = @Model.Id;
+        let currentPullRequestId = @Model.PullRequest;
+        let currentForGenexusPoll = @Model.ForGenexus.ToString().ToLower();
+        let isPolling = false;
+
+        // Estado actual de los environments
+                // Estado actual de los environments - VERSIÓN MEJORADA
+        let environmentStates = {};
+        @foreach (var env in Model.Environments)
+        {
+                                // Asegurar que statusBadgeLabel sea una cadena
+                                var badgeLabel = env.StatusBadgeLabel?.ToString() ?? "";
+                                @:environmentStates[@env.Id] = {
+                                @:    status: '@env.Status',
+                                @:    statusLabel: '@env.StatusLabel',
+                                @:    statusBadgeLabel: '@Html.Raw(badgeLabel.Replace("'", "\\'"))',
+                                @:    modifiedOn: '@(env.ModifiedOn?.ToString("yyyy-MM-ddTHH:mm:ss") ?? "")',
+                                @:    attempt: @env.Attempt,
+                                @:    hasPendingApprovals: @((alertStatus.Contains(env.Status) ||
+                                         (env.Status == "inProgress" && env.PostDeployApprovals.Any(a => a.Status == "pending"))).ToString().ToLower())
+                                @:};
+        }
+
+                // Función para actualizar el estado del release completo
+        async function updateReleaseStatus() {
+            try {
+                const response = await fetch(`/Release/GetReleaseStatus?id=${currentPullRequestId}&projectType=${currentProject}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    // Actualizar timestamp
+                    const now = new Date();
+                    document.getElementById('lastUpdated').innerHTML ="";
+
+                    // Actualizar alerta de aprobaciones pendientes
+                    updatePendingApprovalsAlert(result.environments);
+
+                    // Actualizar cada environment
+                    result.environments.forEach(env => {
+                        updateEnvironmentDisplay(env);
+                    });
+                } else {
+                    // Si hay error en la respuesta
+                    console.error('Error en respuesta del servidor:', result.message);
+                    document.getElementById('lastUpdated').innerHTML =
+                        `<i class="fas fa-exclamation-triangle text-warning"></i> Error: ${result.message}`;
+                }
+            } catch (error) {
+                console.error('Error actualizando estado del release:', error);
+                document.getElementById('lastUpdated').innerHTML =
+                    `<i class="fas fa-exclamation-triangle text-danger"></i> Error al actualizar`;
+            }
+        }
+
+                // Función para actualizar la alerta de aprobaciones pendientes - CON ANIMACIONES
+        function updatePendingApprovalsAlert(environments) {
+            const alertStatus = ['pending', 'inProgress'];
+            const alertContainer = document.getElementById('pendingApprovalsContainer');
+
+            if (!alertContainer) return;
+
+            // Filtrar environments que están en alertStatus
+            const pendingEnvs = environments
+                .filter(e => alertStatus.includes(e.status))
+                .map(e => e.name);
+
+            if (pendingEnvs.length > 0) {
+                const alertHtml = `
+                    <div class="col-12">
+                        <div class="alert alert-info d-flex align-items-center gap-2 animate__animated animate__pulse" role="alert">
+                            <i class="fa fa-info-circle fa-lg text-primary"></i>
+                            <span>
+                                <i class="fa fa-exclamation-triangle me-1 animate__animated animate__shakeX animate__delay-2s"></i>
+                                Pendiente de aprobación en
+                                <strong class="text-decoration-underline">${pendingEnvs.join(', ')}</strong>
+                                stage${pendingEnvs.length > 1 ? 's' : ''}.
+                            </span>
+                            <button type="button" class="btn-close ms-auto" onclick="this.parentElement.remove()"></button>
+                        </div>
+                    </div>
+                `;
+
+                // Agregar animación al mostrar
+                alertContainer.innerHTML = alertHtml;
+                alertContainer.classList.remove('d-none');
+                alertContainer.classList.add('animate__animated', 'animate__fadeInDown');
+
+                // Configurar para que la animación se repita periódicamente
+                const alertElement = alertContainer.querySelector('.alert');
+                if (alertElement) {
+                    setInterval(() => {
+                        alertElement.classList.add('animate__pulse');
+                        setTimeout(() => {
+                            alertElement.classList.remove('animate__pulse');
+                        }, 100);
+                    }, 10000); // Pulso cada 10 segundos
+                }
+            } else {
+                // Agregar animación al ocultar
+                alertContainer.classList.add('animate__animated', 'animate__fadeOutUp');
+                setTimeout(() => {
+                    alertContainer.innerHTML = '';
+                    alertContainer.classList.remove('animate__fadeOutUp', 'animate__animated');
+                    alertContainer.classList.add('d-none');
+                }, 500); // Esperar a que termine la animación
+            }
+        }
+
+                // Función para actualizar la visualización de un environment - CON ICONOS Y ANIMACIONES
+        function updateEnvironmentDisplay(env) {
+            try {
+                    const envElement = document.getElementById(`environment-${env.id}`);
+        if (!envElement) return;
+
+        // Actualizar badge con icono
+        const badgeElement = document.getElementById(`badge-${env.id}`);
+        if (badgeElement) {
+            // Determinar icono según estado
+            let iconClass = 'fa-question-circle';
+            let badgeColor = 'bg-secondary';
+
+            switch (env.status) {
+                case 'succeeded':
+                    iconClass = 'fa-check-circle';
+                    badgeColor = 'badge-success';
+                    break;
+                case 'inProgress':
+                    iconClass = 'fa-spinner fa-spin';
+                    badgeColor = 'badge-primary';
+                    break;
+                case 'pending':
+                    iconClass = 'fa-clock';
+                    badgeColor = 'badge-count';
+                    break;
+                case 'failed':
+                    iconClass = 'fa-times-circle';
+                    badgeColor = 'badge-danger';
+                    break;
+                case 'canceled':
+                    iconClass = 'fa-ban';
+                    badgeColor = 'badge-danger';
+                    break;
+                case 'rejected':
+                    iconClass = 'fa-times';
+                    badgeColor = 'badge-danger';
+                    break;
+                case 'notStarted':
+                    iconClass = 'fa-hourglass-start';
+                    badgeColor = 'badge-count';
+                    break;
+            }
+
+            // Actualizar clases
+            badgeElement.className = `badge ${badgeColor} text-capitalize environment-status-badge animate__animated animate__fadeIn`;
+
+            // Actualizar contenido con icono
+            badgeElement.innerHTML = `<i class="fa ${iconClass} me-1" title="${env.status}"></i>${env.statusLabel}`;
+
+            // Agregar animación específica para estados activos
+            if (env.status === 'inProgress') {
+                badgeElement.classList.add('animate__pulse', 'animate__infinite');
+            } else if (env.status === 'pending') {
+                badgeElement.classList.add('animate__pulse');
+            }
+        }
+
+                // Actualizar timestamp
+                const modifiedElement = envElement.querySelector('.last-modified');
+                if (modifiedElement && env.modifiedOn) {
+                    try {
+                        const modifiedDate = new Date(env.modifiedOn);
+                        if (!isNaN(modifiedDate)) {
+                            const now = new Date();
+                            const diffMs = now - modifiedDate;
+                            const diffMins = Math.floor(diffMs / 60000);
+
+                            let timeText;
+                            if (diffMins < 1) {
+                                timeText = 'Hace unos segundos';
+                            } else if (diffMins < 60) {
+                                timeText = `Hace ${diffMins} minuto${diffMins > 1 ? 's' : ''}`;
+                            } else {
+                                timeText = modifiedDate.toLocaleString('es-AR', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                });
+                            }
+
+                            modifiedElement.innerHTML = `<i class="fa fa-clock me-1"></i>${timeText}`;
+                        }
+                    } catch (dateError) {
+                        console.warn('Error formateando fecha:', dateError);
+                        modifiedElement.textContent = env.modifiedOn;
+                    }
+                }
+
+                // Actualizar número de intento con icono
+                const attemptElement = envElement.querySelector('.attempt-number');
+                if (attemptElement && env.attempt !== undefined && env.attempt > 1) {
+                    const attemptContainer = attemptElement.closest('small');
+                    if (attemptContainer) {
+                        attemptContainer.innerHTML = `<i class="fa fa-redo me-1"></i>Intento #<span class="attempt-number">${env.attempt}</span>`;
+                    }
+                }
+
+                // Actualizar estado en memoria
+                environmentStates[env.id] = {
+                    status: env.status,
+                    statusLabel: env.statusLabel,
+                    statusBadgeLabel: env.statusBadgeLabel,
+                    modifiedOn: env.modifiedOn,
+                    attempt: env.attempt,
+                    hasPendingApprovals: env.status === 'pending' ||
+                                       env.status === 'inProgress' ||
+                                       (env.status === 'inProgress' && env.postDeployApprovals?.some(a => a.status === 'pending'))
+                };
+            } catch (error) {
+                console.error(`Error actualizando environment ${env.id}:`, error);
+            }
+        }
+
+        // Iniciar polling
+        function startPolling() {
+            if (isPolling) return;
+
+            isPolling = true;
+            pollInterval = setInterval(updateReleaseStatus, 5000); // Actualizar cada 5 segundos
+
+            // Actualizar inmediatamente
+            updateReleaseStatus();
+        }
+
+        // Detener polling
+        function stopPolling() {
+            isPolling = false;
+            if (pollInterval) {
+                clearInterval(pollInterval);
+            }
+        }
+
+        // Manejar visibilidad de la página
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                startPolling();
+            }
+        });
+
+        // Iniciar cuando la página carga
+        document.addEventListener('DOMContentLoaded', function() {
+            startPolling();
+        });
+
+        // Limpiar al salir de la página
+        window.addEventListener('beforeunload', function() {
+            stopPolling();
+        });
+
+        const modalAprobar = document.getElementById('modalAprobar');
+        const formAprobar = document.getElementById('formAprobar');
+        const bloqueSinPrueba = document.getElementById('bloqueSinPrueba');
+        const inputSinPrueba = document.getElementById('inputSinPrueba');
+        const checkSinPrueba = document.getElementById('checkSinPrueba');
+        const comentarioAprobacion = document.getElementById('comentarioAprobacion');
+
+        function leerAprobaciones(button) {
+            const raw = button.getAttribute('data-approvals');
+            if (!raw) {
+                return [];
+            }
+            try {
+                return JSON.parse(raw);
+            } catch (e) {
+                return [];
+            }
+        }
+
+        const comentarioPorDefectoQa = 'Aprobado con pruebas funcionales';
+
+        function prepararSinPrueba(incluye) {
+            checkSinPrueba.checked = false;
+            comentarioAprobacion.value = incluye ? comentarioPorDefectoQa : '';
+            comentarioAprobacion.classList.remove('is-invalid');
+            if (incluye) {
+                bloqueSinPrueba.classList.remove('d-none');
+                inputSinPrueba.name = 'sinPrueba';
+                inputSinPrueba.value = '0';
+            } else {
+                bloqueSinPrueba.classList.add('d-none');
+                inputSinPrueba.removeAttribute('name');
+            }
+        }
+
+        modalAprobar.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const varias = button.getAttribute('data-modo') === 'varias';
+            const incluyeSinPrueba = button.getAttribute('data-sin-prueba') === 'true';
+            const container = modalAprobar.querySelector('#contenedor-opciones-aprobacion');
+            const footer = document.getElementById('footerAprobarUna');
+            const texto = document.getElementById('textoConfirmacionAprobar');
+
+            container.innerHTML = '';
+            modalAprobar.querySelector('#aprobarReleaseId').value = button.getAttribute('data-release-id');
+            modalAprobar.querySelector('#aprobarApprovalId').value = button.getAttribute('data-approval-id') || '';
+            modalAprobar.querySelector('#aprobarDescriptor').value = button.getAttribute('data-descriptor') || '';
+            prepararSinPrueba(incluyeSinPrueba);
+            texto.classList.toggle('d-none', incluyeSinPrueba || varias);
+            footer.classList.toggle('d-none', varias);
+            modalAprobar.querySelector('#tituloAprobar').textContent = varias
+                ? 'Elegir grupo para aprobar'
+                : (incluyeSinPrueba ? 'Aprobar' : 'Confirmar aprobación');
+
+            if (!varias) {
+                return;
+            }
+
+            leerAprobaciones(button).forEach(a => {
+                const btn = document.createElement('button');
+                btn.type = 'submit';
+                btn.className = 'btn btn-outline-primary w-100 mb-2';
+                btn.textContent = `Aprobar como ${a.displayName}`;
+                btn.addEventListener('click', function () {
+                    modalAprobar.querySelector('#aprobarApprovalId').value = a.id;
+                    modalAprobar.querySelector('#aprobarDescriptor').value = a.descriptor;
+                });
+                container.appendChild(btn);
+            });
+        });
+
+        formAprobar.addEventListener('submit', function (event) {
+            if (!modalAprobar.querySelector('#aprobarApprovalId').value) {
+                event.preventDefault();
+                return;
+            }
+
+            if (!inputSinPrueba.name) {
+                return;
+            }
+
+            const marcado = checkSinPrueba.checked;
+            inputSinPrueba.value = marcado ? '1' : '0';
+            if (marcado && comentarioAprobacion.value.trim().length === 0) {
+                event.preventDefault();
+                comentarioAprobacion.classList.add('is-invalid');
+            }
+        });
+
+        comentarioAprobacion.addEventListener('input', function () {
+            comentarioAprobacion.classList.remove('is-invalid');
+        });
+
+        const modalRechazar = document.getElementById('modalRechazar');
+        document.getElementById('formRechazar').addEventListener('submit', function (event) {
+            if (!modalRechazar.querySelector('#rechazarApprovalId').value) {
+                event.preventDefault();
+            }
+        });
+
+        modalRechazar.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const varias = button.getAttribute('data-modo') === 'varias';
+            const container = modalRechazar.querySelector('#contenedor-opciones-rechazo');
+            const footer = document.getElementById('footerRechazarUna');
+
+            container.innerHTML = '';
+            modalRechazar.querySelector('#rechazarReleaseId').value = button.getAttribute('data-release-id');
+            modalRechazar.querySelector('#rechazarApprovalId').value = button.getAttribute('data-approval-id') || '';
+            modalRechazar.querySelector('#rechazarDescriptor').value = button.getAttribute('data-descriptor') || '';
+            modalRechazar.querySelector('#comentarioRechazo').value = '';
+            footer.classList.toggle('d-none', varias);
+            modalRechazar.querySelector('#tituloRechazar').textContent = varias
+                ? 'Seleccioná grupo para rechazar'
+                : 'Motivo del rechazo';
+
+            if (!varias) {
+                return;
+            }
+
+            leerAprobaciones(button).forEach(a => {
+                const btn = document.createElement('button');
+                btn.type = 'submit';
+                btn.className = 'btn btn-outline-danger w-100 mb-2';
+                btn.textContent = `Rechazar como ${a.displayName}`;
+                btn.addEventListener('click', function () {
+                    modalRechazar.querySelector('#rechazarApprovalId').value = a.id;
+                    modalRechazar.querySelector('#rechazarDescriptor').value = a.descriptor;
+                });
+                container.appendChild(btn);
+            });
+        });
+    </script>
+
+}
+
+@functions {
+    string GetStatusColor(string status) => status switch
+    {
+        "Succeeded" => "success",
+        "Queued" => "warning",
+        "NotDeployed" => "secondary",
+        "Failed" => "danger",
+        _ => "light"
+    };
+}

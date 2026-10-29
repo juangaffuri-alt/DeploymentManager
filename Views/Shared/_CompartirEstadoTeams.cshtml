@@ -1,0 +1,11 @@
+@model PasadorScript.ViewModels.CompartirEstadoTeamsViewModel
+<li>
+    <a href="@Model.TeamsShareUrl"
+       class="dropdown-item js-compartir-teams"
+       target="_blank"
+       rel="noopener noreferrer"
+       data-estado-url="@Model.EstadoUrl"
+       title="Compartir estado del deploy en Teams">
+        <i class="fas fa-share-alt"></i> Compartir en Teams
+    </a>
+</li>

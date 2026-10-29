@@ -1,0 +1,809 @@
+﻿@using X.PagedList.Mvc.Core
+@using X.PagedList;
+@using X.PagedList.Mvc.Core.Fluent;
+@using PasadorScript.DTO.AzureDev;
+@using PasadorScript.Helpers;
+@inject IConfiguration _configuration;
+@inject PasadorScript.Services.AdGroups.IAdGroupService _adGroupService;
+@section Styles {
+    <style>
+        .gap-2 {
+            gap: 0.5rem;
+        }
+
+        .status-icon {
+            font-size: 1.15rem;
+            line-height: 1;
+        }
+
+        .status-icon-success { color: #31CE36 !important; }
+        .status-icon-danger { color: #F25961 !important; }
+        .status-icon-primary { color: #1572E8 !important; }
+        .status-icon-warning { color: #FFAD46 !important; }
+        .status-icon-secondary { color: #6861CE !important; }
+        .status-icon-muted { color: #8492a6 !important; }
+
+        .status-cell,
+        .statusP-cell,
+        .statusbuild-cell {
+            width: 2.25rem;
+            text-align: center;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+    </style>
+}
+@model PasadorScript.ViewModels.SearchCommits
+@{
+    ViewData["Title"] = "Builds & Releases";
+    var log = await _adGroupService.GetInfoUser();
+}
+
+@Html.AntiForgeryToken()
+<form method="get" asp-action="Pendientes">
+    <input type="hidden" name="usuarioExplicit" value="true" />
+    <div class="d-flex align-items-left align-items-md-center flex-column flex-md-row pt-2 pb-4">
+        <div>
+            <h3 class="fw-bold mb-3">Builds & Releases</h3>
+            <h6 class="op-7 mb-2">Pasaje a QA y PROD de Bantotal-Gx16 <strong>con deploy activo y pendientes de aprobación</strong></h6>
+        </div>
+        <div class="ms-md-auto py-2 py-md-0">
+            <a asp-action="AddBuild" class="btn btn-secondary">
+                <span class="btn-label">
+                    <i class="fa fa-plus"></i>
+                </span>
+                Nuevo build
+            </a>
+            <!-- Botón para actualizar manualmente - inicialmente deshabilitado -->
+            <button type="button" id="btnActualizarEstados" class="btn btn-info ms-2" disabled>
+                <span class="btn-label">
+                    <i class="fas fa-sync-alt"></i>
+                </span>
+                <span id="btnTexto">Cargando estados...</span>
+            </button>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="card-title">Builds</h4>
+                    <div class="row g-3 align-items-end">
+                        <div class="col-12 col-md">
+                            <div class="form-group mb-0">
+                                <label asp-for="RepositoryId" class="form-label"></label>
+                                <select asp-for="RepositoryId" asp-items="ViewBag.Aplicativos" class="form-control">
+                                </select>
+                                <span asp-validation-for="RepositoryId" class="text-danger"></span>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md">
+                            <div class="form-group mb-0">
+                                <label asp-for="Usuario" class="form-label"></label>
+                                <div class="input-icon">
+                                    <span class="input-icon-addon">
+                                        <i class="fa fa-user"></i>
+                                    </span>
+                                    <input type="text" class="form-control" placeholder="Usuario AD" asp-for="Usuario" autocomplete="off">
+                                    <div id="sugerencias" class="dropdown-menu w-100"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md">
+                            <div class="form-group mb-0">
+                                <label asp-for="Descripcion" class="form-label"></label>
+                                <input type="text" class="form-control" asp-for="Descripcion">
+                            </div>
+                        </div>
+                        <div class="col-12 col-md">
+                            <div class="form-group mb-0">
+                                <label class="form-label" asp-for="NroIncidente">Referencia</label>
+                                <input asp-for="NroIncidente" type="number" min="1" class="form-control" placeholder="Nro" />
+                            </div>
+                        </div>
+                        <div class="col-12 col-md">
+                            <div class="form-group mb-0">
+                                <label asp-for="ObjetoGx" class="form-label"></label>
+                                <input type="text" class="form-control" asp-for="ObjetoGx" maxlength="100" autocomplete="off" />
+                            </div>
+                        </div>
+                        <div class="col-12 col-md">
+                            <div class="form-group mb-0">
+                                <label class="form-label d-none d-md-block">&nbsp;</label>
+                                <button class="btn btn-primary w-100" id="btnBuscar" type="submit">
+                                    <span class="btn-label">
+                                        <i class="fas fa-search"></i>
+                                    </span>
+                                    Filtrar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                @{
+                    var aplicativos = _configuration.GetSection("Projects").Get<List<ProjectSetting>>()?.FirstOrDefault(x => x.Active && x.IsGx)?.Repos.Where(x => x.OwnBuild.HasValue && x.OwnBuild.Value);
+                }
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover table-compact">
+                            <thead>
+                                <tr>
+                                    <th>Id</th>
+                                    <th>Analista</th>
+                                    <th>Fecha</th>
+                                    <th>Descripcion</th>
+                                    <th>Referencia</th>
+                                    <th>Build</th>
+                                    <th>Estado build</th>
+                                    @foreach (var e in Model.Environments.Where(X => X.Visible))
+                                    {
+                                        <th>@e.Name</th>
+                                    }
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            @if (Model.Resultado.Any())
+                            {
+                                <tbody>
+                                    @{
+                                        var repo = aplicativos?.FirstOrDefault(x => x.RepoName == Model.RepositoryId);
+                                        var definitionId = repo?.BuildDefinitionId;
+                                    }
+                                    @foreach (var b in Model.Resultado)
+                                    {
+                                        var title = "";
+                                        if (b.IdPr.HasValue && b.IdPr.Value != 0)
+                                        {
+                                            title = $"PullRequestId: {b.IdPr.Value}";
+                                        }
+                                        <tr>
+                                            <td title="@title">@b.IdBuildGx</td>
+                                            <td>@b.Usuario</td>
+                                            <td>@b.FechaCreacion.ToShortDateString()</td>
+                                            <td title="@b.Descripcion">@(b.IsHotfix ? Html.Raw("<i class='fas fa-bolt status-icon status-icon-danger me-1' title='Hotfix' aria-label='Hotfix'></i>") : "")@b.DescripcionShort</td>
+                                            <td><span class="badge badge-primary">@b.DescripcionTipoCambio @b.NroIncidente</span></td>
+                                            <td id="status-@b.IdPr" class="status-cell status-@b.IdPr">
+                                                <i class="fas fa-clock status-icon status-icon-muted" title="no iniciado" aria-label="no iniciado"></i>
+                                            </td>
+                                            <td id="statusbuild-@b.IdPr" class="statusbuild-cell statusbuild-@b.IdPr">
+                                                <i class="fas fa-clock status-icon status-icon-muted" title="no iniciado" aria-label="no iniciado"></i>
+                                            </td>
+                                            @foreach (var e in Model.Environments.Where(X => X.AzureProjectType == b.AzureProjectType.ToLower()))
+                                            {
+                                                <td id="statusP-@b.IdPr-@e.Id" class="statusP-cell statusP-@b.IdPr-@e.Id">
+                                                    <i class="fas fa-clock status-icon status-icon-muted" title="no iniciado" aria-label="no iniciado"></i>
+                                                </td>
+                                            }
+                                            <td>
+                                                <div class="btn-group dropdown">
+                                                    <button class="btn btn-link btn-sm text-muted p-1"
+                                                            type="button"
+                                                            data-bs-toggle="dropdown"
+                                                            title="Acciones"
+                                                            aria-label="Acciones">
+                                                        <i class="fas fa-ellipsis-v"></i>
+                                                    </button>
+                                                    <ul class="dropdown-menu" role="menu">
+                                                        @if (!b.IdPr.HasValue && b.Usuario == log.Username)
+                                                        {
+                                                            <li>
+                                                                <a asp-action="editar" asp-route-id="@b.IdBuildGx"
+                                                                   data-bs-toggle="tooltip"
+                                                                   title="Editar"
+                                                                   class="dropdown-item"
+                                                                   data-original-title="Editar">
+                                                                    <i class="fa fa-edit"></i> Editar
+                                                                </a>
+                                                            </li>
+                                                            <li>
+                                                                <button asp-action="delete" asp-route-id="@b.IdBuildGx"
+                                                                        data-bs-toggle="tooltip" data-id="@b.IdBuildGx"
+                                                                        title="Eliminar"
+                                                                        class="dropdown-item delete-link"
+                                                                        data-original-title="Eliminar">
+                                                                    <i class="fa fa-trash"></i> Eliminar
+                                                                </button>
+                                                            </li>
+                                                        }
+                                                        else
+                                                        {
+                                                            <li>
+                                                                <a href="#"
+                                                                   title="Log"
+                                                                   class="dropdown-item logClass"
+                                                                   data-idPr="@b.IdPr"
+                                                                   data-original-title="Ver log de compilación" onclick="openAzureLogsModal(@b.IdPr)">
+                                                                    <i class="fa fa-file"></i> Ver log de compilación
+                                                                </a>
+                                                            </li>
+                                                            <li>
+                                                                <a asp-action="Vote" asp-route-id="@b.IdBuildGx"
+                                                                   data-bs-toggle="tooltip"
+                                                                   title="Aprobar"
+                                                                   class="dropdown-item"
+                                                                   data-original-title="Aprobar">
+                                                                    <i class="fa fa-code-branch"></i> Promover
+                                                                </a>
+                                                            </li>
+                                                            <li>
+                                                                <a asp-action="EstadoPullRequest" asp-controller="PullRequest" asp-route-prId="@b.IdPr" asp-route-definitionId="@definitionId"
+                                                                   data-bs-toggle="tooltip"
+                                                                   title="Estado PR"
+                                                                   class="dropdown-item"
+                                                                   data-original-title="Estado">
+                                                                    <i class="fas fa-cogs"></i> Estado PR
+                                                                </a>
+                                                            </li>
+                                                        }
+                                                        <li>
+                                                            <a asp-action="ViewStatus" asp-route-id="@b.IdPr" asp-route-projectType="@b.AzureProjectType" asp-controller="Release"
+                                                               data-bs-toggle="tooltip"
+                                                               title="Release"
+                                                               class="dropdown-item"
+                                                               data-original-title="Aprobar">
+                                                                <i class="fa fa-rocket"></i> Estado deploy
+                                                            </a>
+                                                        </li>
+                                                        @Html.CompartirEstadoTeams(b.IdPr, b.AzureProjectType)
+                                                        <li>
+                                                            <a asp-action="RedirectToAudit"
+                                                               asp-controller="GxDeploy"
+                                                               asp-route-idBuildGx="@b.IdBuildGx"
+                                                               data-bs-toggle="tooltip"
+                                                               title="Ver Historial"
+                                                               class="dropdown-item"
+                                                               data-original-title="Historial">
+                                                                <i class="fa fa-history"></i> Historial
+                                                            </a>
+                                                        </li>
+                                                        <li>
+                                                            <a asp-action="ViewObjects" asp-controller="GxDeploy" asp-route-IdBuildGx="@b.IdBuildGx"
+                                                               data-bs-toggle="tooltip"
+                                                               title="Ver archivos"
+                                                               class="dropdown-item"
+                                                               data-original-title="Ver archivos">
+                                                                <i class="fa fa-file-code"></i> Ver
+                                                            </a>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            }
+                            else
+                            {
+                                <tbody id="tablaBody">
+                                    <tr id="filaVacia">
+                                        <td colspan="10" class="text-center text-muted">No se han encontrado registros.</td>
+                                    </tr>
+                                </tbody>
+                            }
+                        </table>
+                        @Html.PagedListPager(Model.Resultado, page => Url.Action("Pendientes", new { page, repositoryId = Model.RepositoryId, usuario = Model.Usuario ?? string.Empty, usuarioExplicit = UsuarioFiltroHelper.FlagPaginacion(Model.Usuario), descripcion = Model.Descripcion, nroIncidente = Model.NroIncidente, objetoGx = Model.ObjetoGx }), new X.PagedList.Mvc.Core.PagedListRenderOptions
+                        {
+                            LiElementClasses = new string[] { "page-item" },
+                            PageClasses = new string[] { "page-link" },
+                            ActiveLiElementClass = "active",
+                            UlElementClasses = new List<string> { "pagination pg-primary" }
+                        })
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+<div id="modalLogContainer"></div>
+
+@section Scripts {
+    <script src="~/js/logModal.js"></script>
+    <script>
+        const input = document.getElementById("Usuario");
+        const sugerencias = document.getElementById("sugerencias");
+        const btnActualizarEstados = document.getElementById('btnActualizarEstados');
+        const btnTexto = document.getElementById('btnTexto');
+
+        // Función para habilitar el botón de actualizar
+        function habilitarBotonActualizar() {
+        if (btnActualizarEstados && btnTexto) {
+        btnActualizarEstados.disabled = false;
+        btnTexto.textContent = 'Actualizar estados';
+        btnActualizarEstados.classList.remove('btn-secondary');
+        btnActualizarEstados.classList.add('btn-info');
+        console.log('Botón de actualizar habilitado');
+        }
+        }
+
+        // Función para deshabilitar el botón de actualizar durante una operación
+        function deshabilitarBotonActualizar(texto) {
+        if (btnActualizarEstados && btnTexto) {
+        btnActualizarEstados.disabled = true;
+        btnTexto.textContent = texto || 'Procesando...';
+        btnActualizarEstados.classList.remove('btn-info');
+        btnActualizarEstados.classList.add('btn-secondary');
+        }
+        }
+
+        // Función para obtener el repositoryId desde el DOM
+        function getRepositoryIdFromDom(prId) {
+        const prIds = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Resultado.Where(a => a.IdPr.HasValue && a.IdPr.Value > 0).Select(s => new { idPr = s.IdPr, repositoryId = s.BtRepo })));
+        const initialData = prIds.find(item => item.idPr === prId);
+        if (initialData && initialData.repositoryId) {
+        return initialData.repositoryId;
+        }
+
+        const prRow = document.querySelector(`tr td[id*="status-${prId}"]`)?.closest('tr');
+        if (prRow) {
+        const repoCell = prRow.querySelector('[data-repository-id]');
+        if (repoCell) {
+        return repoCell.getAttribute('data-repository-id');
+        }
+        }
+
+        console.warn(`No se pudo determinar repositoryId para PR ${prId}`);
+        return 'unknown';
+        }
+
+        function getProjectTypeFromDom(prId) {
+        const prIds = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Resultado.Where(a => a.IdPr.HasValue && a.IdPr.Value > 0).Select(s => new { idPr = s.IdPr, AzureProjectType = s.AzureProjectType })));
+        const initialData = prIds.find(item => item.idPr === prId);
+        if (initialData && initialData.AzureProjectType) {
+        return initialData.AzureProjectType;
+        }
+        const prRow = document.querySelector(`tr td[id*="status-${prId}"]`)?.closest('tr');
+        if (prRow) {
+        const projectCell = prRow.querySelector('[data-project-type]');
+        if (projectCell) {
+        return projectCell.getAttribute('data-project-type');
+        }
+        }
+        console.warn(`No se pudo determinar projectType para PR ${prId}`);
+        return 'unknown';
+        }
+
+        input.addEventListener("input", async function () {
+        let query = this.value;
+        if (query.length < 2) {
+        sugerencias.classList.remove("show");
+        sugerencias.innerHTML = "";
+        return;
+        }
+
+        const response = await fetch(`/RuntimeHelper/BuscarUsuario?term=${encodeURIComponent(query)}&tablasType=${@((int)PasadorScript.Helpers.TablasType.Builds)}`);
+        const data = await response.json();
+
+        if (data.length === 0) {
+        sugerencias.classList.remove("show");
+        sugerencias.innerHTML = "";
+        return;
+        }
+
+        sugerencias.innerHTML = "";
+        data.forEach(item => {
+        const a = document.createElement("a");
+        a.classList.add("dropdown-item");
+        a.href = "#";
+        a.textContent = item;
+        a.onclick = (e) => {
+        e.preventDefault();
+        input.value = item;
+        sugerencias.classList.remove("show");
+        sugerencias.innerHTML = "";
+        };
+        sugerencias.appendChild(a);
+        });
+
+        sugerencias.classList.add("show");
+        });
+
+        // Ocultar sugerencias al hacer clic fuera
+        document.addEventListener("click", (e) => {
+        if (!e.target.closest("#Usuario")) {
+        sugerencias.classList.remove("show");
+        }
+        });
+
+        async function openAzureLogsModal(prId, azureProjectType) {
+        const container = document.getElementById('modalLogContainer');
+        if (!container) {
+        console.error('Container modalLogContainer no encontrado!');
+        return;
+        }
+
+        container.innerHTML = '';
+
+        const res = await fetch(`/pullRequest/ViewLogs?prId=${prId}&projectType=${azureProjectType}&gx=true`);
+        if (!res.ok) {
+        alert('Error al abrir modal de logs: ' + res.status);
+        return;
+        }
+
+        const html = await res.text();
+        container.innerHTML = html;
+
+        const modalEl = document.getElementById('azureLogsModal');
+        if (modalEl) {
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+        autoSelectFirstTask();
+        }
+        }
+
+        // Función para actualizar un PR específico (GX)
+        async function updatePrStatus(prId, repositoryId, projectType, forceRefresh = false) {
+        try {
+        if (!repositoryId || repositoryId === 'unknown') {
+        repositoryId = getRepositoryIdFromDom(prId);
+        }
+        if (!projectType || projectType === 'unknown') {
+        projectType = getProjectTypeFromDom(prId);
+        }
+
+        const url = `/PullRequest/GetStatusGx?prId=${prId}&repositoryId=${repositoryId}&projectType=${projectType}&forceRefresh=${forceRefresh}`;
+        const response = await fetch(url);
+
+        if (!response.ok) {
+        console.warn(`Error HTTP ${response.status} al actualizar PR ${prId}`);
+        return false;
+        }
+
+        const pr = await response.json();
+
+        const cell = document.getElementById(`status-${prId}`);
+        const cellstatus = document.getElementById(`statusbuild-${prId}`);
+
+        if (!cell) {
+        console.warn(`No se encontró celda para PR ${prId}`);
+        return false;
+        }
+
+        if (!cellstatus) {
+        console.warn(`No se encontró celda de build para PR ${prId}`);
+        }
+
+        // Actualizar estado PR
+        const prStatus = pr.pullRequestStatus?.toLowerCase() || '';
+        const badgeClass = pr.prStatusBadgeClass || '';
+
+        let iconClass = 'fas fa-question-circle';
+        let colorClass = 'status-icon-muted';
+
+        if (prStatus.includes('completado') || prStatus.includes('completed') || prStatus.includes('merged')) {
+        iconClass = 'fas fa-check-circle';
+        colorClass = 'status-icon-success';
+        } else if (prStatus.includes('pendiente') || prStatus.includes('pending')) {
+        iconClass = 'fas fa-clock';
+        colorClass = 'status-icon-warning';
+        } else if (prStatus.includes('activo') || prStatus.includes('active') || prStatus.includes('progress')) {
+        iconClass = 'fas fa-sync-alt fa-spin';
+        colorClass = 'status-icon-primary';
+        } else if (prStatus.includes('fallido') || prStatus.includes('failed') || prStatus.includes('rejected')) {
+        iconClass = 'fas fa-times-circle';
+        colorClass = 'status-icon-danger';
+        } else if (prStatus.includes('abandonado') || prStatus.includes('abandoned')) {
+        iconClass = 'fas fa-ban';
+        colorClass = 'status-icon-danger';
+        } else if ((badgeClass || '').includes('success')) {
+        colorClass = 'status-icon-success';
+        } else if ((badgeClass || '').includes('danger')) {
+        colorClass = 'status-icon-danger';
+        } else if ((badgeClass || '').includes('primary')) {
+        colorClass = 'status-icon-primary';
+        }
+
+        const prLabel = (pr.pullRequestStatus || 'Desconocido').replace(/"/g, '&quot;');
+        cell.innerHTML = `<i class="${iconClass} status-icon ${colorClass}" title="${prLabel}" aria-label="${prLabel}"></i>`;
+
+        // Actualizar estado Build
+        const buildStatus = pr.status?.toLowerCase() || '';
+        const result = pr.result?.toLowerCase() || '';
+
+        let buildIconClass = 'fas fa-question-circle';
+        let buildColorClass = 'status-icon-muted';
+
+        if (buildStatus === "inprogress") {
+        buildIconClass = 'fas fa-spinner fa-spin';
+        buildColorClass = 'status-icon-primary';
+        } else if (result === "succeeded" || result === "success") {
+        buildIconClass = 'fas fa-check-circle';
+        buildColorClass = 'status-icon-success';
+        } else if (result === "failed" || result === "failure") {
+        buildIconClass = 'fas fa-times-circle';
+        buildColorClass = 'status-icon-danger';
+        } else if (result === "canceled" || result === "cancelled") {
+        buildIconClass = 'fas fa-ban';
+        buildColorClass = 'status-icon-danger';
+        } else if (result === "partiallysucceeded") {
+        buildIconClass = 'fas fa-exclamation-triangle';
+        buildColorClass = 'status-icon-warning';
+        } else {
+        buildIconClass = 'fas fa-clock';
+        buildColorClass = 'status-icon-muted';
+        }
+
+        const statusText = (buildStatus === "inprogress" ? 'En progreso' : (pr.result || 'no iniciado')).replace(/"/g, '&quot;');
+
+        if (cellstatus) {
+        cellstatus.innerHTML = `<i class="${buildIconClass} status-icon ${buildColorClass}" title="${statusText}" aria-label="${statusText}"></i>`;
+        }
+
+        return true;
+
+        } catch (error) {
+        console.error(`Error actualizando PR ${prId}:`, error);
+        return false;
+        }
+        }
+
+        // Función para actualizar releases/deployments de un PR (GX)
+        async function updatePrReleases(prId, repositoryId = null, projectType = null, forceRefresh = false) {
+        try {
+        if (!repositoryId || repositoryId === 'unknown') {
+        repositoryId = getRepositoryIdFromDom(prId);
+        }
+        if (!projectType || projectType === 'unknown') {
+        projectType = getProjectTypeFromDom(prId);
+        }
+
+        const url = `/PullRequest/GetReleasesByPr?prId=${prId}&projectType=${projectType}&forceRefresh=${forceRefresh}`;
+        const response = await fetch(url);
+
+        if (!response.ok) {
+        console.warn(`Error HTTP ${response.status} al actualizar releases de PR ${prId}`);
+        return false;
+        }
+
+        const release = await response.json();
+        if (!release || !release.environments) {
+        return false;
+        }
+
+        const environments = release.environments;
+
+        environments.forEach(env => {
+        const cellId = `statusP-${prId}-${env.definitionEnvironmentId}`;
+        const cell = document.getElementById(cellId);
+
+        if (cell) {
+        const badgeClass = env.statusBadgeLabel || 'badge badge-count';
+        const statusLabel = env.statusLabel || env.status || 'Desconocido';
+        const envStatus = env.status?.toLowerCase() || '';
+
+        let iconClass = 'fas fa-question-circle';
+        let colorClass = 'status-icon-muted';
+
+        if (envStatus.includes('succeeded') || envStatus.includes('success')) {
+        iconClass = 'fas fa-check-circle';
+        colorClass = 'status-icon-success';
+        } else if (envStatus.includes('inprogress') || envStatus.includes('queued')) {
+        iconClass = 'fas fa-spinner fa-spin';
+        colorClass = 'status-icon-primary';
+        } else if (envStatus.includes('failed') || envStatus.includes('failure') || envStatus.includes('rejected') || envStatus.includes('rejectado')) {
+        iconClass = 'fas fa-times-circle';
+        colorClass = 'status-icon-danger';
+        } else if (envStatus.includes('canceled') || envStatus.includes('cancelled')) {
+        iconClass = 'fas fa-ban';
+        colorClass = 'status-icon-danger';
+        } else if (envStatus.includes('pending') || envStatus.includes('waiting')) {
+        iconClass = 'fas fa-clock';
+        colorClass = 'status-icon-warning';
+        } else if (envStatus.includes('notstarted') || envStatus.includes('not started')) {
+        iconClass = 'fas fa-hourglass-start';
+        colorClass = 'status-icon-muted';
+        } else if ((badgeClass || '').includes('warning')) {
+        colorClass = 'status-icon-warning';
+        } else if ((badgeClass || '').includes('secondary')) {
+        colorClass = 'status-icon-secondary';
+        }
+
+        const envLabel = statusLabel.replace(/"/g, '&quot;');
+        const envBadgeHtml = `<i class="${iconClass} status-icon ${colorClass}" title="${envLabel}" aria-label="${envLabel}"></i>`;
+
+        cell.innerHTML = envBadgeHtml;
+        } else {
+        console.warn(`No se encontró celda ${cellId} para environment ${env.definitionEnvironmentId}`);
+        }
+        });
+
+        return true;
+
+        } catch (error) {
+        console.error(`Error actualizando releases de PR ${prId}:`, error);
+        return false;
+        }
+        }
+
+        // Función para actualizar un PR completo (estado + releases)
+        async function updatePr(prId, repositoryId, projectType, forceRefresh = false) {
+        if (!prId || prId == 0) return false;
+
+        try {
+        const prSuccess = await updatePrStatus(prId, repositoryId, projectType, forceRefresh);
+        const releasesSuccess = await updatePrReleases(prId, repositoryId, projectType, forceRefresh);
+        return prSuccess || releasesSuccess;
+        } catch (error) {
+        console.error(`Error actualizando PR ${prId}:`, error);
+        return false;
+        }
+        }
+
+        // Función para actualizar TODOS los estados manualmente
+        async function actualizarTodosEstados() {
+        if (!btnActualizarEstados) return;
+
+        // Guardar estado original del botón
+        const originalHtml = btnActualizarEstados.innerHTML;
+
+        // Mostrar estado de carga
+        deshabilitarBotonActualizar('Actualizando...');
+
+        try {
+        // Obtener todos los PRs que necesitan actualización - CORREGIDO
+        const prIds = @Html.Raw(Json.Serialize(Model.Resultado
+                                                                                        .Where(b => b.IdPr.HasValue && b.IdPr.Value > 0)
+                                                                                        .Select(b => new { idPr = b.IdPr.Value, repositoryId = b.BtRepo })));
+
+        if (!prIds || prIds.length === 0) {
+        console.log('No hay PRs para actualizar');
+        habilitarBotonActualizar();
+        return;
+        }
+
+        console.log(`Actualizando ${prIds.length} PRs...`);
+
+        // Actualizar en secuencia para no sobrecargar el servidor
+        let actualizados = 0;
+        for (const item of prIds) {
+        try {
+        await updatePr(item.idPr, item.repositoryId, '@Model.AzureProjectType', true);
+        actualizados++;
+
+        // Pequeña pausa entre solicitudes para no saturar
+        if (actualizados < prIds.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        } catch (error) {
+        console.error(`Error actualizando PR ${item.idPr}:`, error);
+        }
+        }
+
+        console.log(`${actualizados}/${prIds.length} PRs actualizados`);
+
+        // Mostrar notificación de éxito
+        if (actualizados > 0) {
+        Swal.fire({
+        icon: 'success',
+        title: 'Estados actualizados',
+        text: `Se actualizaron ${actualizados} PRs correctamente`,
+        timer: 2000,
+        showConfirmButton: false
+        });
+        }
+
+        } catch (error) {
+        console.error('Error actualizando estados:', error);
+        Swal.fire('Error', 'No se pudieron actualizar los estados', 'error');
+        } finally {
+        // Restaurar estado del botón
+        habilitarBotonActualizar();
+        }
+        }
+
+        // Función para carga inicial ÚNICA (sin polling)
+        async function cargaInicialEstados() {
+        // Obtener PRs desde el servidor - CORREGIDO
+        const prIds = @Html.Raw(Json.Serialize(Model.Resultado
+                                                            .Where(b => b.IdPr.HasValue && b.IdPr.Value > 0)
+                                                                    .Select(b => new { idPr = b.IdPr.Value, repositoryId = b.BtRepo, projectType = b.AzureProjectType })));
+
+        if (!prIds || prIds.length === 0) {
+        // No hay PRs para cargar, habilitar el botón de inmediato
+        habilitarBotonActualizar();
+        console.log('No hay PRs para cargar inicialmente');
+        return;
+        }
+
+        console.log(`Carga inicial de ${prIds.length} PRs...`);
+
+        try {
+        // Actualizar en lotes pequeños para no sobrecargar
+        const batchSize = 3;
+        let totalCargados = 0;
+
+        for (let i = 0; i < prIds.length; i += batchSize) {
+        const batch = prIds.slice(i, i + batchSize);
+        const resultados = await Promise.allSettled(batch.map(item => updatePr(item.idPr, item.repositoryId, item.projectType)));
+
+        totalCargados += resultados.filter(r => r.status === 'fulfilled' && r.value).length;
+
+        // Actualizar texto del botón con progreso
+        if (btnTexto) {
+        const porcentaje = Math.round((totalCargados / prIds.length) * 100);
+        btnTexto.textContent = `Cargando... ${porcentaje}%`;
+        }
+
+        // Pequeña pausa entre lotes
+        if (i + batchSize < prIds.length) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        }
+        }
+
+        console.log(`Carga inicial completada: ${totalCargados}/${prIds.length} PRs cargados`);
+
+        } catch (error) {
+        console.error('Error en carga inicial:', error);
+        } finally {
+        // Habilitar el botón cuando termine la carga inicial (éxito o error)
+        habilitarBotonActualizar();
+        }
+        }
+
+        // Eliminar registro
+        document.querySelectorAll('.delete-link').forEach(function (link) {
+        link.addEventListener('click', function (e) {
+        e.preventDefault();
+        var id = $(this).data('id');
+        const href = link.getAttribute('href');
+
+        swal.fire({
+        title: '¿Desea eliminar el cambio?',
+        text: 'Esta acción no se puede deshacer y eliminará los archivos del repo de manera permanente',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar'
+        }).then((result) => {
+        if (result.isConfirmed) {
+        fetch("/GxDeploy/Delete", {
+        method: 'POST',
+        headers: {
+        'Content-Type': 'application/json',
+        'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value
+        },
+        body: JSON.stringify(id)
+        })
+        .then(async response => {
+        if (response.redirected) {
+        return { redirected: true, url: response.url };
+        }
+        return { redirected: false, data: await response.json() };
+        })
+        .then(result => {
+        if (result.redirected) {
+        window.location.href = result.url;
+        } else if (result.data?.success) {
+        if (result.data.redirectUrl) {
+        window.location.href = result.data.redirectUrl;
+        } else {
+        Swal.fire('Éxito', result.data.message, 'success').then(() => {
+        window.location.reload();
+        });
+        }
+        } else {
+        Swal.fire('Error', result.data?.message || 'Error desconocido', 'error');
+        }
+        })
+        .catch(error => {
+        Swal.fire('Error', 'Error de conexión', 'error');
+        console.error('Error:', error);
+        });
+        }
+        });
+        });
+        });
+
+        // Event listener para el botón de actualizar
+        btnActualizarEstados?.addEventListener('click', actualizarTodosEstados);
+
+        // Inicializar cuando el DOM esté listo
+        document.addEventListener("DOMContentLoaded", function () {
+        // Carga inicial única (sin polling posterior)
+        cargaInicialEstados();
+
+        console.log('Página cargada. El botón se habilitará cuando termine la carga inicial.');
+        });
+    </script>
+}

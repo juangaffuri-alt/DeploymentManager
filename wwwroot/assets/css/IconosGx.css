@@ -1,0 +1,169 @@
+﻿.icon32 {
+    display: inline-block;
+    width: 32px;
+    height: 32px;
+    background-image: url('/assets/img/bpn/css_sprites.png');
+    background-repeat: no-repeat;
+    background-size: auto;
+    vertical-align: middle;
+    margin-right: 8px;
+}
+
+.icon24 {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    background-image: url('/assets/img/bpn/css_sprites.png');
+    background-repeat: no-repeat;
+    background-size: auto;
+    vertical-align: middle;
+    margin-right: 8px;
+}
+
+.icon16 {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    background-image: url('/assets/img/bpn/css_sprites.png');
+    background-repeat: no-repeat;
+    background-size: auto;
+    vertical-align: middle;
+    margin-right: 8px;
+}
+
+
+.bg-ObjectWorkWithSD {
+    background-position: -10px -10px;
+}
+
+.bg-ObjectWorkpanel {
+    background-position: -62px -10px;
+}
+
+.bg-Platform_Android {
+    background-position: -10px -62px;
+}
+
+.bg-Platform_Cobol {
+    background-position: -270px -10px;
+}
+
+.bg-Platform_CSharp {
+    background-position: -62px -62px;
+}
+
+.bg-Platform_iOS {
+    background-position: -114px -10px;
+}
+
+.bg-Platform_Java {
+    background-position: -218px -218px;
+}
+
+.bg-Platform_JS {
+    background-position: -114px -62px;
+}
+
+.bg-Platform_NetCore {
+    background-position: -10px -114px;
+}
+
+.bg-Platform_RPG {
+    background-position: -270px -46px;
+}
+
+.bg-Platform_Ruby {
+    background-position: -270px -82px;
+}
+
+.bg-Platform_Swift {
+    background-position: -270px -118px;
+}
+
+.bg-Platform_Unknown {
+    background-position: -270px -154px;
+}
+
+.bg-Platform_W8 {
+    background-position: -270px -190px;
+}
+
+.bg-ObjectAttribute {
+    background-position: -62px -114px;
+}
+
+.bg-Platform_VFP {
+    background-position: -270px -226px;
+}
+
+.bg-Platform_W8_old {
+    background-position: -10px -270px;
+}
+
+.bg-Platform_WinPhone {
+    background-position: -46px -270px;
+}
+
+.bg-ObjectDashboard {
+    background-position: -114px -114px;
+}
+
+.bg-ObjectDataProvider {
+    background-position: -166px -10px;
+}
+
+.bg-ObjectDataSelector {
+    background-position: -166px -62px;
+}
+
+.bg-ObjectDomain {
+    background-position: -166px -114px;
+}
+
+.bg-ObjectDataView {
+    background-position: -10px -166px;
+}
+
+.bg-ObjectLanguage {
+    background-position: -62px -166px;
+}
+
+.bg-ObjectMenu {
+    background-position: -114px -166px;
+}
+
+.bg-ObjectMenuBar {
+    background-position: -166px -166px;
+}
+
+.bg-ObjectOfflineDatabase {
+    background-position: -218px -10px;
+}
+
+.bg-ObjectProcedure {
+    background-position: -218px -62px;
+}
+
+.bg-ObjectSDPanel {
+    background-position: -218px -114px;
+}
+
+.bg-ObjectSubtypeGroup {
+    background-position: -218px -166px;
+}
+
+.bg-ObjectTable {
+    background-position: -10px -218px;
+}
+
+.bg-ObjectTransaction {
+    background-position: -62px -218px;
+}
+
+.bg-ObjectTheme {
+    background-position: -114px -218px;
+}
+
+.bg-ObjectWebpanel {
+    background-position: -166px -218px;
+}

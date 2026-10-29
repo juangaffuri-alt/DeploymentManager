@@ -1,0 +1,444 @@
+﻿@model string
+
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error - DM</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .error-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            max-width: 800px;
+            width: 100%;
+            overflow: hidden;
+            border: 1px solid #e1e5eb;
+        }
+
+        .error-header {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+
+            .error-header::after {
+                content: '';
+                position: absolute;
+                bottom: -10px;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 60px;
+                height: 4px;
+                background: white;
+                border-radius: 2px;
+                opacity: 0.7;
+            }
+
+        .error-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        .error-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            letter-spacing: -0.5px;
+        }
+
+        .error-subtitle {
+            font-size: 16px;
+            opacity: 0.9;
+            font-weight: 400;
+        }
+
+        .error-content {
+            padding: 40px;
+        }
+
+        .error-message {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            border-left: 4px solid #dc3545;
+        }
+
+            .error-message h3 {
+                color: #495057;
+                font-size: 18px;
+                margin-bottom: 15px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+
+                .error-message h3 i {
+                    color: #dc3545;
+                }
+
+        .exception-box {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #212529;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+            .exception-box::-webkit-scrollbar {
+                width: 6px;
+            }
+
+            .exception-box::-webkit-scrollbar-track {
+                background: #f1f1f1;
+                border-radius: 3px;
+            }
+
+            .exception-box::-webkit-scrollbar-thumb {
+                background: #c1c1c1;
+                border-radius: 3px;
+            }
+
+                .exception-box::-webkit-scrollbar-thumb:hover {
+                    background: #a8a8a8;
+                }
+
+        .actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            min-width: 160px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+            color: white;
+        }
+
+            .btn-primary:hover {
+                background: linear-gradient(135deg, #0b5ed7 0%, #0a58ca 100%);
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(13, 110, 253, 0.25);
+            }
+
+        .btn-secondary {
+            background: white;
+            color: #6c757d;
+            border: 2px solid #dee2e6;
+        }
+
+            .btn-secondary:hover {
+                background: #f8f9fa;
+                border-color: #adb5bd;
+                transform: translateY(-2px);
+            }
+
+        .info-note {
+            background: #e7f3ff;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 30px;
+            border-left: 4px solid #0d6efd;
+        }
+
+            .info-note h4 {
+                color: #0d6efd;
+                font-size: 16px;
+                margin-bottom: 10px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .info-note p {
+                color: #495057;
+                font-size: 14px;
+                line-height: 1.5;
+            }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+            font-size: 14px;
+            border-top: 1px solid #e9ecef;
+            background: #f8f9fa;
+        }
+
+        .error-id {
+            display: inline-block;
+            background: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-family: monospace;
+            font-weight: 600;
+            color: #dc3545;
+            border: 1px dashed #dc3545;
+            margin-left: 10px;
+        }
+
+        @@media (max-width: 768px) {
+            .error-content {
+                padding: 25px;
+            }
+
+            .error-header {
+                padding: 25px 20px;
+            }
+
+            .error-title {
+                font-size: 24px;
+            }
+
+            .actions {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+
+            .exception-box {
+                max-height: 200px;
+            }
+        }
+
+        @@media (max-width: 480px) {
+            .error-header {
+                padding: 20px 15px;
+            }
+
+            .error-icon {
+                font-size: 48px;
+            }
+
+            .error-content {
+                padding: 20px 15px;
+            }
+
+            .error-message {
+                padding: 20px 15px;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="error-container">
+        <!-- Header -->
+        <div class="error-header">
+            <i class="fas fa-exclamation-triangle error-icon"></i>
+            <h1 class="error-title">Error del Sistema</h1>
+            <p class="error-subtitle">
+                Se produjo un error al procesar la solicitud
+                <span class="error-id">@DateTime.Now.ToString("HHmmss")</span>
+            </p>
+        </div>
+
+        <!-- Content -->
+        <div class="error-content">
+            <!-- Error Message -->
+            <div class="error-message">
+                <h3>
+                    <i class="fas fa-bug"></i>
+                    Detalles del error:
+                </h3>
+                <div class="exception-box">
+                    @if (!string.IsNullOrEmpty(Model))
+                    {
+                        @Model
+                    }
+                    else
+                    {
+                        <span style="color: #6c757d; font-style: italic;">
+                            No hay información detallada del error disponible.
+                        </span>
+                    }
+                </div>
+            </div>
+
+            
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>
+                <i class="fas fa-database"></i> DeploymentManager •
+                @DateTime.Now.ToString("dd/MM/yyyy HH:mm")
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Función para reintentar la operación
+        function retryOperation() {
+            const btn = event.target.closest('.btn-primary');
+            const originalContent = btn.innerHTML;
+
+            // Mostrar estado de carga
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Reintentando...';
+            btn.disabled = true;
+
+            // Reintentar después de 1 segundo
+            setTimeout(() => {
+                // Si estamos en un iframe, notificar al padre
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'retryErrorOperation'
+                    }, '*');
+                } else {
+                    // Si no, recargar la página
+                    window.location.reload();
+                }
+            }, 1000);
+        }
+
+        // Función para cerrar la vista de error
+        function closeErrorView() {
+            // Si estamos en un iframe dentro de un modal
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'closeErrorModal'
+                }, '*');
+            } else {
+                // Si es una página independiente, ir atrás
+                if (window.history.length> 1) {
+                    window.history.back();
+                } else {
+                    window.close();
+                }
+            }
+        }
+
+        // Función para copiar el error al portapapeles
+        function copyErrorToClipboard() {
+            const errorText = document.querySelector('.exception-box').innerText;
+
+            navigator.clipboard.writeText(errorText)
+                .then(() => {
+                    // Mostrar notificación simple
+                    showNotification('Error copiado al portapapeles', 'success');
+                })
+                .catch(err => {
+                    showNotification('No se pudo copiar el error', 'error');
+                });
+        }
+
+        // Función para mostrar notificaciones simples
+        function showNotification(message, type) {
+            // Crear elemento de notificación
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${type === 'success' ? '#198754' : '#dc3545'};
+                color: white;
+                padding: 12px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                z-index: 10000;
+                animation: slideIn 0.3s ease;
+                font-size: 14px;
+                font-weight: 500;
+            `;
+
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            // Remover después de 3 segundos
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        // Agregar estilos para animaciones
+        const style = document.createElement('style');
+        style.textContent = `
+            @@keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @@keyframes slideOut {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(100%); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Escuchar mensajes del padre (si estamos en iframe)
+        window.addEventListener('message', function(event) {
+            switch (event.data.type) {
+                case 'closeModal':
+                    closeErrorView();
+                    break;
+                case 'copyError':
+                    copyErrorToClipboard();
+                    break;
+            }
+        });
+
+        // Permitir copiar el error con Ctrl+C sobre el cuadro
+        document.querySelector('.exception-box').addEventListener('click', function() {
+            // Opcional: seleccionar todo el texto al hacer clic
+            this.style.userSelect = 'all';
+        });
+
+        // Ajustar altura si estamos en iframe
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({
+                type: 'iframeHeight',
+                height: document.body.scrollHeight
+            }, '*');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,208 @@
+﻿@model PasadorScript.ViewModels.AzureDevopsPullRequestExtend
+@using System.Text.Encodings.Web
+
+<div class="row mt-4">
+    <!-- Columna izquierda - Información principal -->
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-file-alt"></i> Información de @Model.TypeDescription ID #@Model.IdType || PullRequest #@Model.PullRequestId
+                </h5>
+            </div>
+            <div class="card-body">
+                <div>
+                    <span>Estado del PR: </span>
+                    <span class="@Model.StatusBadgeClass">
+                        @Model.StatusLabel
+                    </span>
+                    <span>Aplicación: </span>
+                    <span class="badge bg-secondary">@(Model.Repository?.Name ?? "-")</span>
+                    <span>Tipo cambio: </span>
+                    <span class="badge bg-primary">@Model.DescripcionIncidente: @Model.NroIncidente</span>
+                </div>
+                <p class="text-muted mb-0">
+                    <i class="fas fa-code-branch"></i>
+                    @if (!string.IsNullOrEmpty(Model.SourceRefName) && !string.IsNullOrEmpty(Model.TargetRefName))
+                    {
+                        <text>
+                            De <strong>@Model.SourceRefName.Replace("refs/heads/", "")</strong>
+                            a <strong>@Model.TargetRefName.Replace("refs/heads/", "")</strong>
+                        </text>
+                    }
+                    else
+                    {
+                        <span>Sin información de ramas (PR no disponible).</span>
+                    }
+                </p>
+            </div>
+        </div>
+
+        <!-- Descripción -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-file-alt"></i> Descripción
+                </h5>
+            </div>
+            <div class="card-body">
+                @if (!string.IsNullOrEmpty(Model.Descripcion))
+                {
+                    <div class="markdown-body">@Html.Raw(Model.Descripcion)</div>
+                }
+                else
+                {
+                    <p class="text-muted fst-italic">No hay descripción proporcionada.</p>
+                }
+            </div>
+        </div>
+
+        <!-- Información de Commits -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-code-commit"></i> Información de Commits
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Source Commit</h6>
+                        <p class="mb-1">
+                            <code>@Model.LastMergeSourceCommit.CommitId.Substring(0, 8)</code>
+                        </p>
+                        <small class="text-muted">@Model.LastMergeSourceCommit.CommitId</small>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Target Commit</h6>
+                        <p class="mb-1">
+                            <code>@Model.LastMergeTargetCommit.CommitId.Substring(0, 8)</code>
+                        </p>
+                        <small class="text-muted">@Model.LastMergeTargetCommit.CommitId</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Columna derecha - Metadatos -->
+    <div class="col-md-4">
+        <!-- Información del Autor -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-user"></i> Creado por
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    @if (!string.IsNullOrEmpty(Model.CreatedBy.ImageUrl))
+                    {
+                        var imgsrc = $"/api/Handler/imagen-devops?url={UrlEncoder.Default.Encode(Model.CreatedBy.ImageUrl)}";
+                        <img src="@imgsrc"
+                             alt="@Model.CreatedBy.DisplayName"
+                             class="rounded-circle me-3"
+                             width="48"
+                             height="48">
+                    }
+                    <div>
+                        <h6 class="mb-1">@Model.CreatedBy.DisplayName</h6>
+                        <p class="text-muted mb-0 small">@Model.CreatedBy.UniqueName</p>
+                        <small class="text-muted">
+                            <i class="fas fa-calendar"></i>
+                            @Model.CreationDate.ToString("dd/MM/yyyy HH:mm")
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Estado del Merge -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-code-merge"></i> Estado del Merge
+                </h5>
+            </div>
+            <div class="card-body">
+                @{
+                    var mergeStatusBadge = Model.MergeStatus switch
+                    {
+                        "succeeded" => "badge bg-success",
+                        "failed" => "badge bg-danger",
+                        "conflicts" => "badge bg-warning",
+                        "queued" => "badge bg-info",
+                        "rejectedByPolicy" => "badge bg-danger",
+                        _ => "badge bg-secondary"
+                    };
+
+                    var mergeStatusText = Model.MergeStatus switch
+                    {
+                        "succeeded" => "Exitoso",
+                        "failed" => "Fallido",
+                        "conflicts" => "Conflictos",
+                        "queued" => "En cola",
+                        "rejectedByPolicy" => "Rechazado por políticas",
+                        _ => Model.MergeStatus
+                    };
+                }
+                <span class="@mergeStatusBadge">@mergeStatusText</span>
+            </div>
+        </div>
+
+        <!-- Revisores -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-users"></i> Revisores
+                </h5>
+            </div>
+            <div class="card-body">
+                @if (Model.Reviewers != null && Model.Reviewers.Any())
+                {
+                    foreach (var reviewer in Model.Reviewers)
+                    {
+                        var reviewerBadge = reviewer.Vote switch
+                        {
+                            10 => "badge bg-success",
+                            5 => "badge bg-warning",
+                            -10 => "badge bg-danger",
+                            -5 => "badge bg-secondary",
+                            _ => "badge bg-light text-dark"
+                        };
+
+                        var voteText = reviewer.Vote switch
+                        {
+                            10 => "Aprobado",
+                            5 => "Aprobado con sugerencias",
+                            -10 => "Rechazado",
+                            -5 => "Esperando autor",
+                            _ => "Sin voto"
+                        };
+
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <div class="d-flex align-items-center">
+                                @if (!string.IsNullOrEmpty(reviewer.ImageUrl))
+                                {
+                                    var imgsrc = $"/api/Handler/imagen-devops?url={UrlEncoder.Default.Encode(reviewer.ImageUrl)}";
+
+                                    <img src="@imgsrc"
+                                         alt="@reviewer.DisplayName"
+                                         class="rounded-circle me-2"
+                                         width="32"
+                                         height="32">
+                                }
+                                <span class="small">@reviewer.DisplayName</span>
+                            </div>
+                            <span class="@reviewerBadge small">@voteText</span>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <p class="text-muted small mb-0">No hay revisores asignados.</p>
+                }
+            </div>
+        </div>
+    </div>
+</div>

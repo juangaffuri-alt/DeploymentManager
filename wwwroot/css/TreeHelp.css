@@ -1,0 +1,34 @@
+﻿.zip-icon {
+    margin-right: 8px;
+    position: relative;
+}
+
+.folder-icon {
+    margin-right: 8px;
+    color: #f1c40f;
+}
+
+.file-icon {
+    margin-right: 8px;
+}
+
+.tree {
+    font-family: 'Consolas', 'Monaco', 'Lucida Console', monospace;
+    font-size: 14px;
+    line-height: 1.3;
+}
+
+.eliminated {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+.comment {
+    color: #e74c3c;
+    font-weight: bold;
+    margin-left: 10px;
+}
+
+.tree-line {
+    color: #7f8c8d;
+}

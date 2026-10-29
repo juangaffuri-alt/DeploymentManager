@@ -1,0 +1,96 @@
+﻿@model PasadorScript.ViewModels.ContentFileView
+@Html.AntiForgeryToken()
+
+@section Styles {
+    <!-- CSS del tema (podés elegir otros en la web de Prism) -->
+    <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism.min.css" rel="stylesheet" />
+
+    <!-- JS de Prism -->
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+    <!-- Lenguaje SQL -->
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-sql.min.js"></script>
+
+}
+<!--   Big container   -->
+<form asp-action="Vote" asp-controller="Files" method="post" id="vote-form">
+    <input type="hidden" asp-for="IdScript" value="@Model.IdScript" />
+    <input type="hidden" asp-for="BranchNameDesa" value="@Model.BranchNameDesa" />
+    <input type="hidden" asp-for="BranchNameQA" value="@Model.BranchNameQA" />
+    <input type="hidden" asp-for="BranchNamePR" value="@Model.BranchNamePR" />
+    <input type="hidden" asp-for="RepositoryId" value="@Model.RepositoryId" />
+    <input type="hidden" asp-for="PullRequestIdPR" value="@Model.PullRequestIdPR" />
+    <input type="hidden" asp-for="PullRequestIdQA" value="@Model.PullRequestIdQA" />
+    <input type="hidden" asp-for="RepositoryId" value="@Model.RepositoryId" />
+    <div class="container">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="card-subtitle text-muted mb-0">
+                                <i class="fas fa-bug me-2"></i>
+                                @Model.DescripcionScript
+                            </h5>
+                            <div class="d-flex gap-2">
+                                <span class="badge badge-success">@Model.DescripcionTipoPasaje #@Model.NumeroIncidente</span>
+                            </div>
+                        </div>
+                        <h3 class="card-title text-primary fw-bold mb-2">
+                            <i class="fas fa-code me-2"></i>
+                            Archivos/Scripts
+                        </h3>
+                    </div>
+                    <div class="card-body">
+
+
+                        <ul class="nav nav-pills nav-secondary  nav-pills-no-bd nav-pills-icons" id="pills-tab-with-icon" role="tablist">
+                            @{
+                                var selected = "true";
+                                var classActive = "show active";
+                                var fname = "";
+                                var active = "active";
+                            }
+                            @foreach (var f in Model.Files)
+                            {
+                                fname = Uri.EscapeDataString(f.FileName);
+                                <li class="nav-item" role="presentation">
+                                    <a class="nav-link @active" id="pills-@fname-tab" data-bs-toggle="pill" href="#@fname" role="tab" aria-controls="pills-@fname" aria-selected="@selected">
+                                        <i class="fa fa-file-code"></i> @f.FileName
+                                    </a>
+
+                                </li>
+                                selected = "false";
+                                active = "";
+                            }
+                        </ul>
+                        <div class="tab-content mt-2 mb-3" id="pills-tabContent">
+                            @foreach (var f in Model.Files)
+                            {
+
+                                fname = Uri.EscapeDataString(f.FileName);
+                                <div class="tab-pane fade @classActive" id="@fname" role="tabpanel" aria-labelledby="pills-@fname-tab">
+
+                                    @* <span class="badge badge-count"><i class="fas fa-calendar-alt me-2"></i>@f.FechaCreacion.ToString("dd-MM-yyyy HH:mm")</span>
+                                    <span class="badge badge-primary"><i class="fas fa-rocket me-2"></i>@f.DescripcionEstado</span> *@
+                                    <pre style="max-height:300px; overflow-y:auto" class="language-sql" tabindex="0"><code class="language-sql">@Html.Raw(f.Content)</code></pre>
+                                </div>
+                                classActive = "";
+                            }
+
+                        </div>
+
+                    </div>
+                    <div class="card-action">
+                        <a class="btn btn-secondary" asp-action="Index" asp-controller="SqlFiles">Volver</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <input type="hidden" asp-for="Vote" id="Vote" />
+    <input type="hidden" asp-for="Comment" id="Comment" />
+</form>
+
+@section Scripts {
+    
+}

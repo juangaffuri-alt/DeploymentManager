@@ -1,0 +1,202 @@
+﻿@using X.PagedList.Mvc.Core
+@using X.PagedList;
+@using X.PagedList.Mvc.Core.Fluent;
+@using PasadorScript.DTO.TeamDev;
+@model SearchAll;
+@{
+    var exp = Model.Expression.Length > 50 ? Model.Expression.Substring(0, 50) + "..." : Model.Expression;
+}
+
+<h2>Resultados de búsqueda para "@exp"</h2>
+
+@if (Model == null || !Model.Resultado.Any())
+{
+    <p>No se encontraron resultados.</p>
+}
+else
+{
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-compact">
+                <thead>
+                    <tr>
+                        <th>Tipo</th>
+                        <th>Referencia</th>
+                        <th>Id</th>
+                        <th>Analista</th>
+                        <th>Fecha</th>
+                        <th>Descripcion</th>
+                        <th></th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    @foreach (var s in Model.Resultado)
+                    {
+                        @* var analista = await _serviciosGraph.InfoUser(s.Usuario);
+                                var originalUrl = analista?._links.avatar.href!;
+                                var encodedUrl = UrlEncoder.Default.Encode(originalUrl);
+                                var imgSrc = $"/api/Handler/imagen-devops?url={encodedUrl}"; *@
+                        var title = "";
+                        if (s.PullRequestId != 0)
+                        {
+                            title = $"PullRequestId: {s.PullRequestId}";
+                        }
+                        <tr data-pr-id="@s.PullRequestId">
+                            <td><span class="badge badge-info"><i class="@s.IconType"></i> @s.DescriptionType</span></td>
+                            <td><span class="badge badge-primary">@s.DescripcionTipoCambio @s.NroIncidente</span></td>
+                            <td title="@title">@s.Id</td>
+                            <td>@s.Autor</td>
+                            <td>@s.Date.ToShortDateString()</td>
+                            <td>@s.Title</td>
+                            <td>
+                                <div class="btn-group dropdown">
+                                    <button class="btn btn-secondary dropdown-toggle btn-xs"
+                                            type="button"
+                                            data-bs-toggle="dropdown">
+                                        Acciones
+                                    </button>
+                                    <ul class="dropdown-menu" role="menu">
+                                        @if (s.PullRequestId != 0)
+                                        {
+                                            if (s.Type == SearchTermType.Script)
+                                            {
+                                                <li>
+                                                    <a asp-action="EstadoPullRequestScripts" asp-controller="PullRequest" asp-route-prId="@s.PullRequestId"
+                                                       data-bs-toggle="tooltip"
+                                                       title="Estado PR"
+                                                       class="dropdown-item"
+                                                       data-original-title="Estado">
+                                                        <i class="fas fa-cogs"></i> Estado PR
+                                                    </a>
+                                                </li>
+                                                <li>
+                                                    <a asp-action="ViewStatus" asp-route-id="@s.PullRequestId" asp-route-projectType="@s.AzureProjectType" asp-controller="Release"
+                                                       data-bs-toggle="tooltip"
+                                                       title="Release"
+                                                       class="dropdown-item"
+                                                       data-original-title="Aprobar">
+                                                        <i class="fa fa-rocket"></i> Estado deploy
+                                                    </a>
+                                                </li>
+                                            }
+                                            else if (s.Type == SearchTermType.Genexus)
+                                            {
+                                                <li>
+                                                    <a asp-action="ViewStatus" asp-route-id="@s.PullRequestId" asp-route-projectType="@s.AzureProjectType" asp-controller="Release"
+                                                       data-bs-toggle="tooltip"
+                                                       title="Release"
+                                                       class="dropdown-item"
+                                                       data-original-title="Aprobar">
+                                                        <i class="fa fa-rocket"></i> Estado deploy
+                                                    </a>
+                                                </li>
+                                            }
+                                            else
+                                            {
+                                                <li>
+                                                    <a asp-action="ViewStatus" asp-route-id="@s.PullRequestId" asp-route-projectType="@s.AzureProjectType" asp-controller="Release"
+                                                       data-bs-toggle="tooltip"
+                                                       title="Release"
+                                                       class="dropdown-item"
+                                                       data-original-title="Aprobar">
+                                                        <i class="fa fa-rocket"></i> Estado deploy
+                                                    </a>
+                                                </li>
+                                                
+                                            }
+
+                                            @Html.CompartirEstadoTeams(s.PullRequestId, s.AzureProjectType)
+                                        }
+
+                                        @if (s.Type == SearchTermType.Script)
+                                        {
+                                            <li>
+                                                <a asp-action="RedirectToAudit"
+                                                   asp-controller="SqlFiles"
+                                                   asp-route-idScript="@s.Id"
+                                                   data-bs-toggle="tooltip"
+                                                   title="Ver Historial"
+                                                   class="dropdown-item"
+                                                   data-original-title="Historial">
+                                                    <i class="fa fa-history"></i> Historial
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a asp-action="ViewFiles" asp-controller="SqlFiles" asp-route-idCambio="@s.Id"
+                                                   data-bs-toggle="tooltip"
+                                                   title="Ver archivos"
+                                                   class="dropdown-item"
+                                                   data-original-title="Ver archivos">
+                                                    <i class="fa fa-code"></i> Ver
+                                                </a>
+                                            </li>
+                                        }
+                                        else if (s.Type == SearchTermType.Genexus)
+                                        {
+                                            <li>
+                                                <a asp-action="RedirectToAudit"
+                                                   asp-controller="GxDeploy"
+                                                   asp-route-idBuildGx="@s.Id"
+                                                   data-bs-toggle="tooltip"
+                                                   title="Ver Historial"
+                                                   class="dropdown-item"
+                                                   data-original-title="Historial">
+                                                    <i class="fa fa-history"></i> Historial
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a asp-action="ViewObjects" asp-controller="GxDeploy" asp-route-IdBuildGx="@s.Id"
+                                                   data-bs-toggle="tooltip"
+                                                   title="Ver archivos"
+                                                   class="dropdown-item"
+                                                   data-original-title="Ver archivos">
+                                                    <i class="fa fa-file-code"></i> Ver
+                                                </a>
+                                            </li>
+                                        }
+                                        else
+                                        {
+                                            <li>
+                                                <a asp-action="timeline" asp-controller="PullRequest" asp-route-gx="true" asp-route-id="@s.Id"
+                                                   data-bs-toggle="tooltip"
+                                                   title="Ver Historial"
+                                                   class="dropdown-item"
+                                                   data-original-title="Historial">
+                                                    <i class="fa fa-history"></i> Historial
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a asp-action="ViewObjects" asp-controller="EnviosDlya" asp-route-IdBuildGx="@s.Id"
+                                                   data-bs-toggle="tooltip"
+                                                   title="Ver archivos"
+                                                   class="dropdown-item"
+                                                   data-original-title="Ver archivos">
+                                                    <i class="fa fa-file-code"></i> Ver
+                                                </a>
+                                            </li>
+                                        }
+
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            @Html.PagedListPager(Model.Resultado, page => Url.Action("Resultados", new
+            {
+                page,
+                q = Model.Expression
+                }), new X.PagedList.Mvc.Core.PagedListRenderOptions
+            {
+                LiElementClasses = new string[] { "page-item" },
+                PageClasses = new string[] { "page-link" },
+                ActiveLiElementClass = "active",
+                UlElementClasses = new List<string> { "pagination pg-primary" }
+            })
+
+    </div>
+</div>
+}

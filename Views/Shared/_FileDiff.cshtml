@@ -1,0 +1,103 @@
+﻿@using PasadorScript.DTO.AzureDev
+@model PasadorScript.ViewModels.FileDiffPartialModel
+
+
+<div class="file-diff-container">
+    <!-- Header del archivo -->
+    <div class="file-header bg-light py-2 px-3 border-bottom">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="mb-0">@Model.FileName</h6>
+                <small class="text-muted">@Model.FilePath</small>
+            </div>
+            <div>
+                <span class="text-success">+@Model.AddedLines</span>
+                <span class="text-danger">-@Model.DeletedLines</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contenido del diff según el modo -->
+    <div class="diff-content">
+        @if (Model.ViewMode == "inline")
+        {
+            <div class="inline-diff">
+                <table class="table table-borderless diff-table">
+                    <tbody>
+                        @foreach (var line in Model.DiffLines)
+                        {
+                            <tr class="@GetLineClass(line.LineType)">
+                                <td class="line-number text-muted">@GetLineNumber(line)</td>
+                                <td class="line-prefix">@line.LinePrefix</td>
+                                <td class="line-content">@line.Content</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else if (Model.ViewMode == "sidebyside")
+        {
+            <div class="sidebyside-diff">
+                <div class="row">
+                    <div class="col-6 border-end">
+                        <h6 class="text-center py-2 bg-light">Original</h6>
+                        @foreach (var line in Model.DiffLines.Where(l => l.LineType != LineType.Added))
+                        {
+                            <div class="@GetLineClass(line.LineType) px-3 py-1">
+                                <span class="text-muted">@(line.OldLineNumber?.ToString() ?? " ")</span>
+                                <span class="line-prefix">@(line.LineType == LineType.Deleted ? "-" : " ")</span>
+                                <span>@line.Content</span>
+                            </div>
+                        }
+                    </div>
+                    <div class="col-6">
+                        <h6 class="text-center py-2 bg-light">Modified</h6>
+                        @foreach (var line in Model.DiffLines.Where(l => l.LineType != LineType.Deleted))
+                        {
+                            <div class="@GetLineClass(line.LineType) px-3 py-1">
+                                <span class="text-muted">@(line.NewLineNumber?.ToString() ?? " ")</span>
+                                <span class="line-prefix">@(line.LineType == LineType.Added ? "+" : " ")</span>
+                                <span>@line.Content</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+        else if (Model.ViewMode == "unified")
+        {
+            <div class="unified-diff">
+                <pre class="p-3 bg-light"><code>
+                        @foreach (var line in Model.DiffLines)
+                        {
+                            @line.LinePrefix @line.Content
+                        }
+                    </code></pre>
+            </div>
+        }
+    </div>
+</div>
+
+@functions {
+    string GetLineClass(LineType lineType)
+    {
+        return lineType switch
+        {
+            LineType.Added => "diff-added",
+            LineType.Deleted => "diff-deleted",
+            LineType.Modified => "diff-modified",
+            _ => "diff-unchanged"
+        };
+    }
+
+    string GetLineNumber(DiffLine line)
+    {
+        if (line.LineType == LineType.Added)
+            return $"+{line.NewLineNumber}";
+        else if (line.LineType == LineType.Deleted)
+            return $"-{line.OldLineNumber}";
+        else
+            return $"{line.OldLineNumber} +{line.NewLineNumber}";
+    }
+}

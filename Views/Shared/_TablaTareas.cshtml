@@ -1,0 +1,69 @@
+@model PasadorScript.ViewModels.TablaTareasPartialModel
+@{
+    var inputId = "tareasJsonInput_" + Guid.NewGuid().ToString("N")[..8];
+    var tableId = "tablaTareas_" + Guid.NewGuid().ToString("N")[..8];
+    var collapseId = "planImplCollapse_" + Guid.NewGuid().ToString("N")[..8];
+    var editable = Model.Editable;
+}
+<div class="row mt-3 tabla-tareas-wrapper"
+     data-editable="@(editable ? "true" : "false")"
+     data-input-id="@inputId"
+     data-table-id="@tableId"
+     data-collapse-id="@collapseId">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <button type="button"
+                        class="btn btn-link text-decoration-none text-body p-0 tabla-tareas-toggle d-flex align-items-center"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#@collapseId"
+                        aria-expanded="false"
+                        aria-controls="@collapseId"
+                        disabled>
+                    <i class="fas fa-chevron-right me-2 tabla-tareas-chevron"></i>
+                    <i class="fas fa-clipboard-list me-2"></i>
+                    <span class="fw-semibold">Plan de implementación</span>
+                </button>
+                @if (editable)
+                {
+                    <button type="button" class="btn btn-sm btn-primary btn-add-tarea">
+                        <i class="fas fa-plus me-1"></i>Agregar
+                    </button>
+                }
+            </div>
+            <div class="collapse" id="@collapseId">
+                <div class="card-body pt-2">
+                    <input type="hidden" id="@inputId" name="@Model.InputName" value="@(Model.TareasJson ?? "")" class="tareas-json-input" />
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm align-middle tabla-tareas mb-0" id="@tableId" style="table-layout: auto;">
+                            <thead>
+                                <tr>
+                                    <th class="text-center text-nowrap" style="width: 60px;">Nro</th>
+                                    <th>Descripción de la tarea</th>
+                                    <th class="text-nowrap" style="width: 140px;">Responsable</th>
+                                    <th class="text-center text-nowrap" style="width: 90px;">Finalizado</th>
+                                    @if (editable)
+                                    {
+                                        <th class="text-center" style="width: 50px;"></th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody class="tabla-tareas-body">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+    .tabla-tareas-chevron { transition: transform 0.2s ease; }
+    .tabla-tareas-toggle[aria-expanded="true"] .tabla-tareas-chevron {
+        transform: rotate(90deg);
+    }
+    .tabla-tareas-toggle:disabled {
+        opacity: 1;
+        pointer-events: none;
+    }
+</style>

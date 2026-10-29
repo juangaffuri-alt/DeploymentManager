@@ -1,0 +1,933 @@
+﻿@using System.Text.Encodings.Web
+@model PasadorScript.DTO.Auditoria.ReleaseAuditDto
+@{
+    ViewData["Title"] = "Auditoría de Release";
+    var destacado = Model.EnvironmentDestacado;
+    var tieneRevisionesConComentario = Model.PullRequest.Reviewers.Any(r => r.Comments.Any() || !string.IsNullOrEmpty(r.Comment));
+    var tieneRevisores = Model.PullRequest.Reviewers.Any();
+    const string FechaAudit = "dd/MM/yyyy HH:mm";
+}
+
+@section Styles {
+<style>
+    .audit-view {
+        --audit-primary: #177dff;
+        --audit-success: #31CE36;
+        --audit-warning: #FFAD46;
+        --audit-danger: #F25961;
+        --audit-info: #36a3f7;
+        --audit-secondary: #6861CE;
+        --audit-ink: #191919;
+        --audit-body: #2A2F5B;
+        --audit-rail: #eeeeee;
+        --audit-success-wash: #e6f9e7;
+        --audit-warning-wash: #fff5e9;
+        --audit-danger-wash: #fdebec;
+        --audit-info-wash: #e7f4fe;
+        --audit-primary-wash: #e3efff;
+        --audit-secondary-wash: #eeedf8;
+        --audit-success-ink: #257428;
+        --audit-warning-ink: #8c6330;
+        --audit-danger-ink: #a64348;
+        --audit-info-ink: #2a699a;
+        --audit-primary-ink: #18539e;
+        --audit-secondary-ink: #3d3880;
+        color: var(--audit-body);
+    }
+
+    .timeline {
+        position: relative;
+        padding: 20px 0;
+    }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 50px;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: var(--audit-rail);
+        }
+
+    .timeline-item {
+        position: relative;
+        padding-left: 90px;
+        margin-bottom: 40px;
+    }
+
+    .timeline-marker {
+        position: absolute;
+        left: 38px;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 3px solid #fff;
+        box-shadow: 0 1px 4px rgba(25, 25, 25, 0.18);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1;
+    }
+
+        .timeline-marker.bg-primary {
+            background-color: var(--audit-primary);
+        }
+
+        .timeline-marker.bg-success {
+            background-color: var(--audit-success);
+        }
+
+        .timeline-marker.bg-danger {
+            background-color: var(--audit-danger);
+        }
+
+        .timeline-marker.bg-warning {
+            background-color: var(--audit-warning);
+        }
+
+        .timeline-marker.bg-info {
+            background-color: var(--audit-info);
+        }
+
+        .timeline-marker.bg-secondary {
+            background-color: var(--audit-secondary);
+        }
+
+        .timeline-marker i {
+            font-size: 12px;
+        }
+
+        .timeline-marker.bg-success i,
+        .timeline-marker.bg-warning i,
+        .timeline-marker.bg-info i {
+            color: var(--audit-ink);
+        }
+
+        .timeline-marker.bg-primary i,
+        .timeline-marker.bg-danger i,
+        .timeline-marker.bg-secondary i {
+            color: #fff;
+        }
+
+    .user-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        background: var(--audit-primary-wash);
+        border-radius: 20px;
+        border: 1px solid #dee2e6;
+        color: var(--audit-primary-ink);
+    }
+
+        .user-badge img {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+        }
+
+    .audit-card {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(25, 25, 25, 0.06);
+    }
+
+        .audit-card.is-danger {
+            background: var(--audit-danger-wash);
+            border-color: transparent;
+        }
+
+            .audit-card.is-danger h5 {
+                color: var(--audit-danger-ink);
+            }
+
+        .audit-card.is-warning {
+            background: var(--audit-warning-wash);
+            border-color: transparent;
+        }
+
+            .audit-card.is-warning h5 {
+                color: var(--audit-warning-ink);
+            }
+
+    .attempt-badge {
+        background: var(--audit-primary-wash);
+        color: var(--audit-primary-ink);
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.85em;
+        font-weight: 600;
+    }
+
+    .vote-comment {
+        margin-top: .5rem;
+    }
+
+        .vote-comment .label {
+            font-weight: 600;
+            font-size: .85rem;
+            color: var(--audit-body);
+            display: block;
+            margin-bottom: .25rem;
+        }
+
+        .vote-comment .content {
+            background: #fff;
+            color: var(--audit-ink);
+            border-radius: 6px;
+            padding: .5rem;
+            font-size: 1rem;
+            white-space: pre-wrap;
+        }
+
+    .comments-section {
+        margin-top: 1rem;
+    }
+
+        .comments-section .list-group-item {
+            border-radius: 8px;
+            transition: box-shadow 0.2s ease-out;
+        }
+
+            .comments-section .list-group-item:hover {
+                box-shadow: 0 2px 8px rgba(25, 25, 25, 0.1);
+            }
+
+    .comment-content,
+    .audit-evidence {
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        font-size: 1rem;
+        color: var(--audit-ink);
+        background: #fff;
+        border-radius: 8px;
+        padding: .75rem 1rem;
+    }
+
+        .comment-content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+
+        .comment-content pre {
+            background-color: var(--audit-primary-wash);
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 8px 0;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 0.9em;
+            color: var(--audit-ink);
+        }
+
+        .comment-content code {
+            background-color: var(--audit-primary-wash);
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 0.9em;
+            color: var(--audit-primary-ink);
+        }
+
+    .comments-count {
+        font-size: 0.8em;
+        font-weight: normal;
+    }
+
+    .comment-reply {
+        margin-left: 2rem;
+        padding-left: 1rem;
+        background-color: var(--audit-primary-wash);
+    }
+
+    .thread-group {
+        background: var(--audit-primary-wash);
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+
+    .thread-header {
+        background: var(--audit-primary);
+        color: #fff;
+        padding: 8px 15px;
+        border-radius: 6px;
+        margin-bottom: 15px;
+    }
+
+        .thread-header small {
+            color: #fff !important;
+        }
+
+    .comment-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+
+    .comment-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+    }
+
+        .comment-actions .btn-sm {
+            padding: 2px 8px;
+            font-size: 0.8rem;
+        }
+
+    .comment-status {
+        font-size: 0.8rem;
+    }
+
+    .markdown-content {
+        font-family: 'Public Sans', sans-serif;
+        color: var(--audit-body);
+    }
+
+        .markdown-content h1, .markdown-content h2, .markdown-content h3 {
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .markdown-content ul, .markdown-content ol {
+            padding-left: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .markdown-content blockquote {
+            padding-left: 1rem;
+            margin-left: 0;
+            color: var(--audit-body);
+            background: var(--audit-primary-wash);
+            border-radius: 6px;
+            padding: .75rem 1rem;
+        }
+
+    html {
+        scroll-behavior: smooth;
+    }
+
+    .audit-anchor {
+        scroll-margin-top: 1.25rem;
+    }
+
+    .audit-jump {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        margin-bottom: 1.5rem;
+        padding: .25rem 0 .75rem;
+    }
+
+        .audit-jump a {
+            min-height: 2.5rem;
+            display: inline-flex;
+            align-items: center;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .audit-jump a:focus-visible {
+            outline: 2px solid var(--audit-primary);
+            outline-offset: 2px;
+        }
+
+    .audit-jump-destacado {
+        display: inline-flex;
+        align-items: center;
+        min-height: 2.5rem;
+        padding: 0.25rem 0.65rem;
+        border-radius: 0.25rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-decoration: none;
+    }
+
+        .audit-jump a.audit-jump-destacado.is-success {
+            background: var(--audit-success) !important;
+            border-color: var(--audit-success) !important;
+            color: var(--audit-ink) !important;
+        }
+
+        .audit-jump a.audit-jump-destacado.is-danger {
+            background: var(--audit-danger) !important;
+            border-color: var(--audit-danger) !important;
+            color: #fff !important;
+        }
+
+        .audit-jump a.audit-jump-destacado.is-warning {
+            background: var(--audit-warning) !important;
+            border-color: var(--audit-warning) !important;
+            color: var(--audit-ink) !important;
+        }
+
+        .audit-jump a.audit-jump-destacado.is-primary {
+            background: var(--audit-primary) !important;
+            border-color: var(--audit-primary) !important;
+            color: #fff !important;
+        }
+
+        .audit-jump a.audit-jump-destacado.is-secondary {
+            background: var(--audit-secondary) !important;
+            border-color: var(--audit-secondary) !important;
+            color: #fff !important;
+        }
+
+    .audit-verdict {
+        border: 0;
+        color: var(--audit-tone-ink, var(--audit-body));
+        background: var(--audit-tone-wash, #fff);
+    }
+
+        .audit-verdict.is-success {
+            --audit-tone-wash: var(--audit-success-wash);
+            --audit-tone-ink: var(--audit-success-ink);
+        }
+
+        .audit-verdict.is-danger {
+            --audit-tone-wash: var(--audit-danger-wash);
+            --audit-tone-ink: var(--audit-danger-ink);
+        }
+
+        .audit-verdict.is-warning {
+            --audit-tone-wash: var(--audit-warning-wash);
+            --audit-tone-ink: var(--audit-warning-ink);
+        }
+
+        .audit-verdict.is-primary {
+            --audit-tone-wash: var(--audit-primary-wash);
+            --audit-tone-ink: var(--audit-primary-ink);
+        }
+
+        .audit-verdict.is-secondary {
+            --audit-tone-wash: var(--audit-secondary-wash);
+            --audit-tone-ink: var(--audit-secondary-ink);
+        }
+
+        .audit-verdict a {
+            color: inherit;
+        }
+
+        .audit-verdict-when,
+        .audit-verdict-empty {
+            color: inherit;
+            font-weight: 400;
+        }
+
+    .audit-verdict-quote,
+    .audit-evidence {
+        margin: .75rem 0 0;
+        padding: .75rem 1rem;
+        background: #fff;
+        color: var(--audit-ink);
+        border-radius: 8px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 1rem;
+        font-weight: 500;
+        line-height: 1.5;
+    }
+
+    .reviewer-card.is-success,
+    .audit-vote-tile.is-success {
+        background: var(--audit-success-wash);
+        border-color: transparent !important;
+    }
+
+    .reviewer-card.is-danger,
+    .audit-vote-tile.is-danger {
+        background: var(--audit-danger-wash);
+        border-color: transparent !important;
+    }
+
+    .reviewer-card.is-warning,
+    .audit-vote-tile.is-warning {
+        background: var(--audit-warning-wash);
+        border-color: transparent !important;
+    }
+
+    .reviewer-card.is-secondary,
+    .audit-vote-tile.is-secondary {
+        background: var(--audit-secondary-wash);
+        border-color: transparent !important;
+    }
+
+    .audit-approval.is-success {
+        background: var(--audit-success-wash);
+        border-color: transparent;
+    }
+
+    .audit-approval.is-danger {
+        background: var(--audit-danger-wash);
+        border-color: transparent;
+    }
+
+    .audit-approval.is-warning {
+        background: var(--audit-warning-wash);
+        border-color: transparent;
+    }
+
+    .audit-approval.is-secondary {
+        background: var(--audit-secondary-wash);
+        border-color: transparent;
+    }
+
+    .audit-card.is-danger,
+    .audit-card.is-warning,
+    .reviewer-card.is-success,
+    .reviewer-card.is-danger,
+    .reviewer-card.is-warning,
+    .reviewer-card.is-secondary,
+    .audit-vote-tile.is-success,
+    .audit-vote-tile.is-danger,
+    .audit-vote-tile.is-warning,
+    .audit-vote-tile.is-secondary,
+    .audit-approval.is-success,
+    .audit-approval.is-danger,
+    .audit-approval.is-warning,
+    .audit-approval.is-secondary {
+        color: var(--audit-tone-ink, var(--audit-ink));
+    }
+
+    .reviewer-card.is-success,
+    .audit-vote-tile.is-success,
+    .audit-approval.is-success { --audit-tone-ink: var(--audit-success-ink); }
+
+    .reviewer-card.is-danger,
+    .audit-vote-tile.is-danger,
+    .audit-approval.is-danger,
+    .audit-card.is-danger { --audit-tone-ink: var(--audit-danger-ink); }
+
+    .reviewer-card.is-warning,
+    .audit-vote-tile.is-warning,
+    .audit-approval.is-warning,
+    .audit-card.is-warning { --audit-tone-ink: var(--audit-warning-ink); }
+
+    .reviewer-card.is-secondary,
+    .audit-vote-tile.is-secondary,
+    .audit-approval.is-secondary { --audit-tone-ink: var(--audit-secondary-ink); }
+
+    .audit-card.is-danger .text-muted,
+    .audit-card.is-warning .text-muted,
+    .reviewer-card .text-muted,
+    .audit-approval .text-muted {
+        color: inherit !important;
+    }
+
+    .timeline-item:target .audit-card {
+        outline: 2px solid var(--audit-primary);
+        outline-offset: 2px;
+    }
+
+    @@media (max-width: 767.98px) {
+        .timeline::before {
+            left: 18px;
+        }
+
+        .timeline-marker {
+            left: 6px;
+        }
+
+        .timeline-item {
+            padding-left: 48px;
+            margin-bottom: 1.5rem;
+        }
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        html {
+            scroll-behavior: auto;
+        }
+
+        .comments-section .list-group-item {
+            transition: none;
+        }
+    }
+</style>
+}
+
+<div class="audit-view">
+<div class="page-header d-flex justify-content-between align-items-start flex-wrap gap-2">
+    <div>
+        <h1 class="fw-bold mb-1 fs-3">
+            <i class="fas fa-history me-2"></i>Auditoría de Release
+        </h1>
+        <p class="text-muted mb-0">
+            <strong>@Model.ReleaseName</strong>
+            <span class="badge badge-secondary ms-1">#@Model.ReleaseId</span>
+            — Creado el @Model.CreatedOnArgentina.ToString(FechaAudit)
+        </p>
+    </div>
+    <a href="@ViewBag.ReturnUrl">
+        <i class="fas fa-arrow-left me-2"></i>Volver al Release
+    </a>
+</div>
+
+@if (destacado != null)
+{
+    var evidencia = destacado.AprobacionEvidencia;
+    var quien = evidencia?.TieneAprobadorHumano == true
+        ? evidencia!.ApprovedBy.DisplayName
+        : (string.IsNullOrWhiteSpace(evidencia?.ApprovalFor?.DisplayName) ? "Sin aprobador" : evidencia!.ApprovalFor.DisplayName);
+    var cuando = evidencia?.ModifiedOnArgentina?.ToString(FechaAudit)
+        ?? destacado.Deployment?.StartedOnArgentina?.ToString(FechaAudit);
+
+    <div class="card mb-3 audit-verdict is-@destacado.StatusTone">
+        <div class="card-body py-3">
+            <div class="d-flex flex-wrap align-items-baseline gap-2">
+                <a href="#env-@destacado.EnvironmentId" class="fw-bold text-decoration-none">@destacado.Name</a>
+                <span class="@destacado.StatusBadgeLabel">@destacado.StatusLabel</span>
+                <span>@quien</span>
+                @if (!string.IsNullOrEmpty(cuando))
+                {
+                    <span class="audit-verdict-when">@cuando</span>
+                }
+            </div>
+            @if (!string.IsNullOrWhiteSpace(evidencia?.Comments))
+            {
+                <blockquote class="audit-verdict-quote mb-0">@evidencia.Comments</blockquote>
+            }
+            else
+            {
+                <p class="audit-verdict-empty mb-0 mt-2">Sin comentario en la aprobación.</p>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="card mb-3">
+        <div class="card-body text-muted">Este release no tiene environments para auditar.</div>
+    </div>
+}
+
+<nav class="audit-jump" aria-label="Secciones de la auditoría">
+    <a class="btn btn-sm btn-outline-secondary" href="#audit-pr">Pull Request</a>
+    @if (tieneRevisionesConComentario || tieneRevisores)
+    {
+        <a class="btn btn-sm btn-outline-secondary" href="#audit-reviews">Revisiones</a>
+    }
+    @foreach (var envNav in Model.Environments)
+    {
+        var esDestacado = destacado != null && envNav.EnvironmentId == destacado.EnvironmentId;
+        <a class="btn btn-sm @(esDestacado ? envNav.StatusJumpClass : "btn-outline-secondary")" href="#env-@envNav.EnvironmentId">
+            @envNav.Name · @envNav.StatusLabel
+        </a>
+    }
+</nav>
+
+<div class="timeline">
+        <!-- 1. Pull Request Creation -->
+        <div class="timeline-item audit-anchor" id="audit-pr">
+            <div class="timeline-marker bg-primary">
+                <i class="fas fa-code-branch"></i>
+            </div>
+            <div class="audit-card p-4">
+                <h5 class="mb-3">
+                    <i class="fas fa-code-branch me-2"></i>
+                    Pull Request #@Model.PullRequest.PullRequestId
+                </h5>
+                <h6 class="mb-3">@Model.PullRequest.Title</h6>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <small class="text-muted d-block mb-2">Creado por:</small>
+                        <div class="user-badge">
+                            @if (Model.PullRequest.CreatedBy != null)
+                            {
+                                var prCreatorUrl = UrlEncoder.Default.Encode(Model.PullRequest.CreatedBy.ImageUrl ?? "");
+                                var prCreatorImg = $"/api/Handler/imagen-devops?url={prCreatorUrl}";
+                                <img src="@prCreatorImg" alt="@Model.PullRequest.CreatedBy.DisplayName" />
+                                <span>@Model.PullRequest.CreatedBy.DisplayName</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">Autor no disponible</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <small class="text-muted d-block mb-2">Fecha:</small>
+                        <span>@Model.PullRequest.CreationDateArgentina.ToString(FechaAudit)</span>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(Model.PullRequest.Description))
+                {
+                    <div class="mb-3">
+                        <small class="text-muted d-block mb-2">Descripción:</small>
+                        <div class="markdown-content">
+                            <p class="mb-0">@Html.Raw(Html.Encode(Model.PullRequest.Description).Replace("\n", "<br/>"))</p>
+                        </div>
+                    </div>
+                }
+
+                <!-- Commits -->
+                @if (Model.PullRequest.Commits.Any())
+                {
+                    <div class="mt-3">
+                        <small class="text-muted d-block mb-2">
+                            <i class="fas fa-file-code me-1"></i>
+                            Commits (@Model.PullRequest.Commits.Count):
+                        </small>
+                        <div class="list-group">
+                            @foreach (var commit in Model.PullRequest.Commits.Take(5))
+                            {
+                                <div class="list-group-item list-group-item-action py-2">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <code class="text-muted small">@commit.CommitId.Substring(0, 7)</code>
+                                            <span class="ms-2">@commit.Comment</span>
+                                            <small class="text-muted">@commit.DateArgentina.ToString(FechaAudit)</small>
+                                        </div>
+                                    </div>
+                                    <small class="text-muted">@commit.Author.DisplayName</small>
+                                </div>
+                            }
+                            @if (Model.PullRequest.Commits.Count > 5)
+                            {
+                                <div class="list-group-item text-muted text-center py-2 small">
+                                    … y @(Model.PullRequest.Commits.Count - 5) commits más
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+        <!-- 2. PR Reviews/Approvals -->
+        @if (Model.PullRequest.Reviewers.Any(r => r.Comments.Any() || !string.IsNullOrEmpty(r.Comment)))
+        {
+            <div class="timeline-item audit-anchor" id="audit-reviews">
+                <div class="timeline-marker @Model.PullRequest.ReviewsMarkerClass">
+                    <i class="fas fa-comments"></i>
+                </div>
+                <div class="audit-card p-4">
+                    <h5 class="mb-4">
+                        <i class="fas fa-user-check me-2"></i>
+                        Revisiones del Pull Request
+                    </h5>
+
+                    <div class="reviewers-list">
+                        @foreach (var reviewer in Model.PullRequest.Reviewers.Where(r => r.Comments.Any() || !string.IsNullOrEmpty(r.Comment)))
+                        {
+                            <div class="reviewer-card border rounded p-3 mb-4 is-@reviewer.VoteTone">
+                                <!-- Header del revisor -->
+                                <div class="d-flex align-items-center justify-content-between mb-3">
+                                    <div class="d-flex align-items-center">
+                                        @if (reviewer.Reviewer != null && !string.IsNullOrEmpty(reviewer.Reviewer.ImageUrl))
+                                        {
+                                            var reviewerUrl = UrlEncoder.Default.Encode(reviewer.Reviewer.ImageUrl);
+                                            var reviewerImg = $"/api/Handler/imagen-devops?url={reviewerUrl}";
+                                            <img src="@reviewerImg"
+                                                 alt="@reviewer.Reviewer.DisplayName"
+                                                 class="rounded-circle me-3"
+                                                 style="width: 40px; height: 40px;" />
+                                        }
+                                        <div>
+                                            <h6 class="fw-bold mb-0">@reviewer.Reviewer?.DisplayName</h6>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <span class="@reviewer.VoteBadgeClass">
+                                                    <i class="fas @reviewer.VoteIcon me-1"></i>
+                                                    @reviewer.VoteLabel
+                                                </span>
+                                                @if (reviewer.VotedOnArgentina.HasValue)
+                                                {
+                                                    <small class="text-muted">
+                                                        <i class="far fa-clock me-1"></i>
+                                                        @reviewer.VotedOnArgentina.Value.ToString(FechaAudit)
+                                                    </small>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Comentarios -->
+                                @if (reviewer.Comments.Any())
+                                {
+                                    <div class="comments-section mt-3">
+                                        <div class="comments-list">
+                                            @foreach (var comment in reviewer.Comments.OrderBy(c => c.PublishedDate))
+                                            {
+                                                <div class="comment-item border-top pt-3 mt-3">
+                                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                                        <div class="comment-meta">
+                                                            <small class="text-muted">
+                                                                <i class="far fa-calendar me-1"></i>
+                                                                @comment.PublishedDateArgentina.ToString(FechaAudit)
+                                                            </small>
+                                                        </div>
+                                                    </div>
+                                                    <div class="comment-content">
+                                                        <p class="mb-0">@Html.Raw(Html.Encode(comment.Content).Replace("\n", "<br/>"))</p>
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                                else if (!string.IsNullOrEmpty(reviewer.Comment))
+                                {
+                                    <div class="comments-section mt-3">
+                                        <div class="comment-item">
+                                            <div class="comment-meta mb-2">
+                                                <small class="text-muted">
+                                                    <i class="far fa-calendar me-1"></i>
+                                                    @reviewer.VotedOnArgentina?.ToString(FechaAudit) ?? "Sin fecha"
+                                                </small>
+                                            </div>
+                                            <div class="comment-content">
+                                                <p class="mb-0">@Html.Raw(Html.Encode(reviewer.Comment).Replace("\n", "<br/>"))</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+        else if (Model.PullRequest.Reviewers.Any())
+        {
+            <div class="timeline-item audit-anchor" id="audit-reviews">
+                <div class="timeline-marker @Model.PullRequest.ReviewsMarkerClass">
+                    <i class="fas fa-user-check"></i>
+                </div>
+                <div class="audit-card p-4">
+                    <h5 class="mb-3">
+                        <i class="fas fa-user-check me-2"></i>
+                        Revisiones del Pull Request
+                    </h5>
+                    <p class="text-muted mb-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Los revisores no dejaron comentarios en esta revisión.
+                    </p>
+
+                    <div class="row g-2">
+                        @foreach (var reviewer in Model.PullRequest.Reviewers)
+                        {
+                            <div class="col-md-6 col-lg-4">
+                                <div class="border rounded p-3 text-center audit-vote-tile is-@reviewer.VoteTone">
+                                    <div class="fw-bold mb-2">@reviewer.Reviewer?.DisplayName</div>
+                                    <div class="@reviewer.VoteBadgeClass">
+                                        <i class="fas @reviewer.VoteIcon me-1"></i>
+                                        @reviewer.VoteLabel
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- 3. Environments/Deployments -->
+        @foreach (var env in Model.Environments)
+        {
+            var statusIcon = env.Status switch
+            {
+                "succeeded" => "fa-check-circle",
+                "failed" => "fa-times-circle",
+                "inProgress" => "fa-spinner fa-spin",
+                "pending" => "fa-clock",
+                "canceled" => "fa-ban",
+                _ => "fa-question-circle"
+            };
+
+            <div class="timeline-item audit-anchor" id="env-@env.EnvironmentId">
+                <div class="timeline-marker @env.StatusMarkerClass">
+                    <i class="fas @statusIcon"></i>
+                </div>
+                <div class="audit-card p-4 @env.StatusCardClass">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <h5 class="mb-0">
+                            <i class="fas fa-server me-2"></i>
+                            @env.Name
+                            @if (env.Attempt > 1)
+                            {
+                                <span class="attempt-badge ms-2">Intento @env.Attempt</span>
+                            }
+                        </h5>
+                        <span class="@env.StatusBadgeLabel">@env.StatusLabel</span>
+                    </div>
+
+                    <!-- Deployment Info -->
+                    @if (env.Deployment != null)
+                    {
+                        <div class="row g-3 mb-4">
+                            @if (env.Deployment.StartedOn.HasValue)
+                            {
+                                <div class="col-md-4">
+                                    <small class="text-muted d-block mb-2">
+                                        <i class="fas fa-play me-1"></i>Inicio:
+                                    </small>
+                                    <span>@env.Deployment.StartedOnArgentina.Value.ToString(FechaAudit)</span>
+                                </div>
+                            }
+
+                            @if (env.Deployment.CompletedOn.HasValue)
+                            {
+                                <div class="col-md-4">
+                                    <small class="text-muted d-block mb-2">
+                                        <i class="fas fa-stop me-1"></i>Finalización:
+                                    </small>
+                                    <span>@env.Deployment.CompletedOnArgentina.Value.ToString(FechaAudit)</span>
+                                </div>
+                            }
+
+                            @if (env.Deployment.Duration.HasValue)
+                            {
+                                <div class="col-md-4">
+                                    <small class="text-muted d-block mb-2">
+                                        <i class="fas fa-clock me-1"></i>Duración:
+                                    </small>
+                                    <span>@string.Format("{0:hh\\:mm\\:ss}", env.Deployment.Duration.Value)</span>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <!-- Pre-Deploy Approvals -->
+                    @if (env.PreDeployApprovalsRelevantes.Any())
+                    {
+                        <div class="mb-3">
+                            <h6 class="border-bottom pb-2 mb-3">
+                                <i class="fas fa-shield-alt me-2"></i>
+                                Pre-Deployment Approvals
+                            </h6>
+                            @foreach (var approval in env.PreDeployApprovalsRelevantes)
+                            {
+                                @await Html.PartialAsync("_ApprovalItem", approval)
+                            }
+                        </div>
+                    }
+
+                    <!-- Post-Deploy Approvals -->
+                    @if (env.PostDeployApprovalsRelevantes.Any())
+                    {
+                        <div>
+                            <h6 class="border-bottom pb-2 mb-3">
+                                <i class="fas fa-shield-alt me-2"></i>
+                                Post-Deployment Approvals
+                            </h6>
+                            @foreach (var approval in env.PostDeployApprovalsRelevantes)
+                            {
+                                @await Html.PartialAsync("_ApprovalItem", approval)
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>

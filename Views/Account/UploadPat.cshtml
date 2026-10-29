@@ -1,0 +1,101 @@
+﻿@inject PasadorScript.Services.Pat.IPatService _patService
+@inject PasadorScript.Services.AdGroups.IAdGroupService _adUser
+@model PasadorScript.ViewModels.PatView
+
+@{
+    var usr = await _adUser.GetInfoUser();
+    var isValid = await _patService.UserHasValidPatAsync(usr.Username);
+}
+
+@if (!isValid)
+{
+
+    <form method="post" asp-action="UploadPat">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="card-subtitle text-muted mb-0">
+                                    <i class="fas fa-user-lock me-2"></i>
+                                    Personal Access Token (Azure Devops)
+                                </h5>
+                            </div>
+                        </div>
+
+
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-12">
+                                    <div class="form-group">
+                                        <label class="form-label" asp-for="Pat"></label>
+                                        <input type="text" class="form-control" asp-for="Pat" />
+                                        <span asp-validation-for="Pat" class="text-danger"></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                        <div class="card-footer">
+                            <div class="row">
+                                <div class="col-12">
+                                    <button class="btn btn-success" id="submitBtn" type="submit">Aceptar</button>
+                                    <a class="btn btn-info" href="@ViewData["ReturnUrl"]">Cancelar</a>
+                                </div>
+                            </div>
+                        </div>
+
+                        
+
+                        <input type="hidden" name="returnUrl" value="@ViewData["ReturnUrl"]" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+    </form>
+}
+else
+{
+    <form method="post" asp-action="DeletePat">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="card-subtitle text-muted mb-0">
+                                    <i class="fas fa-user-lock me-2"></i>
+                                    Personal Access Token (Azure Devops)
+                                </h5>
+                            </div>
+                        </div>
+
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-12">
+                                    <p>Tu Personal Access Token aún está vigente. Si deseás eliminarlo, podés hacerlo y volver a cargar uno nuevo.</p>
+                                </div>
+                            </div>
+
+                        </div>
+                        <div class="card-footer">
+                            <div class="row">
+                                <div class="col-12">
+                                    <button class="btn btn-danger" id="submitBtn" type="submit">Eliminar</button>
+                                    <a class="btn btn-info" href="@ViewData["ReturnUrl"]">Cancelar</a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <input type="hidden" name="returnUrl" value="@ViewData["ReturnUrl"]" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+    </form>
+}

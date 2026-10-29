@@ -1,0 +1,85 @@
+{
+  "SqlTemplate": [
+    {
+      "Type": "Insert",
+      "Seleccionable": true,
+      "Title": "INSERT",
+      "Script": "TemplateScripts INSERTS.sql",
+      "Description": "Template para inserciones",
+      "IClass": "fas fa-plus-square fa-3x text-success mb-3",
+      "StructureName": "INSERT"
+    },
+    {
+      "Type": "Update",
+      "Seleccionable": true,
+      "Title": "UPDATE/DELETE",
+      "Script": "TemplateScripts UPDATES_DELETES_TRUNCATE.sql",
+      "Description": "Template para modificaciones (update, delete, truncate)",
+      "IClass": "fas fa-edit fa-3x text-warning mb-3",
+      "StructureName": "UPDATE/DELETE"
+    },
+    {
+      "Type": "CreateTable",
+      "Seleccionable": true,
+      "Title": "NUEVA TABLE",
+      "Script": "TemplateScripts Create TABLA.sql",
+      "Description": "Template para tablas que aún no existen en la DB",
+      "IClass": "fas fa-table fa-3x text-info mb-3",
+      "StructureName": "TABLE"
+    },
+    {
+      "Type": "AlterTable",
+      "Seleccionable": false,
+      "Title": "ALTER TABLE",
+      "Script": "TemplateScript Alter TABLA.sql",
+      "Description": "Template para tablas (alter)",
+      "IClass": "fas fa-tools fa-3x text-secondary mb-3",
+      "StructureName": "TABLE"
+    },
+    {
+      "Type": "StoredProcedure",
+      "Seleccionable": true,
+      "Title": "NUEVO STORED PROCEDURE",
+      "Script": "TemplateScripts Alter SP.sql",
+      "Description": "Template para stored procedures que aún no existen en la DB",
+      "IClass": "fas fa-cogs fa-3x text-primary mb-3",
+      "StructureName": "STORED PROCEDURE"
+    },
+    {
+      "Type": "View",
+      "Seleccionable": true,
+      "Title": "NUEVA VIEW",
+      "Script": "TemplateScripts Alter Vista.sql",
+      "Description": "Template para vistas que aún no existen en la DB",
+      "IClass": "fas fa-eye fa-3x text-dark mb-3",
+      "StructureName": "VIEW"
+    },
+    {
+      "Type": "Function",
+      "Seleccionable": true,
+      "Title": "NUEVA FUNCTION",
+      "Script": "TemplateScripts Alter Function.sql",
+      "Description": "Template para functions que aún no existen en la DB",
+      "IClass": "fas fa-cogs fa-3x text-primary mb-3",
+      "StructureName": "FUNCTION"
+    },
+    {
+      "Type": "Index",
+      "Seleccionable": true,
+      "Title": "NUEVO INDEX",
+      "Script": "TemplateScripts INDEX.sql",
+      "Description": "Template para functions que aún no existen en la DB",
+      "IClass": "fas fa-cogs fa-3x text-primary mb-3",
+      "StructureName": "INDEX"
+    },
+    {
+      "Type": "Trigger",
+      "Seleccionable": true,
+      "Title": "NUEVO TRIGGER",
+      "Script": "TemplateScripts Alter Trigger.sql",
+      "Description": "Template para triggers",
+      "IClass": "fas fa-bolt fa-3x text-danger mb-3",
+      "StructureName": "TRIGGER"
+    }
+  ]
+}

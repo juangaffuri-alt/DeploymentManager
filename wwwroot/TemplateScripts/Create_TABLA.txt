@@ -1,0 +1,35 @@
+--------ENCABEZADO DEL SCRIPT-----------------------------------
+--INCIDENTE: GDEM 3747
+--ANALISTA TECNICO: Richard p
+--ANALISTA FUNCIONAL:
+--DESCRIPCION: Recrea tabla Movimiento
+--OBSERVACION: 
+-----------------------------------------------------------------
+ 
+IF OBJECT_ID('dbo.Movimiento') IS NOT NULL --Si existe la Tabla
+EXEC('DROP TABLE dbo.Movimiento;') -- Elimina la tabla
+GO
+
+CREATE TABLE [dbo].[Movimiento](
+	[MovimientoId] [bigint] IDENTITY(1,1) NOT NULL,
+	[Usuario] [varchar](200) NULL,
+	[fechalog] [datetime] NULL,
+	[tipoMovimiento] [varchar](200) NULL,
+	[code] [varchar](10) NULL,
+	[api] [varchar](100) NULL,
+	[clase] [varchar](100) NULL,
+	[metodo] [varchar](200) NULL,
+	[request] [varchar](max) NULL,
+	[response] [varchar](max) NULL,
+	[ipCliente] [varchar](50) NULL,
+	[idTrazabilidad] [varchar](500) NULL,
+CONSTRAINT [PK_Movimiento] PRIMARY KEY CLUSTERED 
+(
+	[MovimientoId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+
+.
+.
+.

@@ -1,0 +1,679 @@
+﻿@model PasadorScript.ViewModels.MonacoDiffModel
+@using System.Text.Json
+
+@{
+    // Detectar si está en iframe
+    bool inIframe = Context.Request.Query.ContainsKey("inIframe");
+    Layout = inIframe ? null : "_Layout"; // No usar layout si está en iframe
+}
+
+@if (!inIframe)
+{
+    @section Styles {
+        <style>
+            .monaco-iframe-container {
+                width: 100%;
+                height: 70vh;
+                border: 1px solid #dee2e6;
+                border-radius: 0.375rem;
+                overflow: hidden;
+                background: white;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                display: flex;
+                flex-direction: column;
+            }
+
+            .monaco-iframe {
+                width: 100%;
+                height: 100%;
+                border: none;
+                flex: 1;
+            }
+
+            .loading-overlay {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 100%;
+                background: rgba(255, 255, 255, 0.9);
+            }
+
+            .header-actions {
+                display: flex;
+                gap: 10px;
+                align-items: center;
+            }
+
+            .btn-group .btn.active {
+                background-color: #0d6efd;
+                border-color: #0d6efd;
+                color: white;
+            }
+
+            .diff-stats {
+                display: flex;
+                gap: 10px;
+                align-items: center;
+            }
+
+            .nav-buttons {
+                display: flex;
+                gap: 5px;
+            }
+
+            .diff-headers {
+                display: flex;
+                background: #f8f9fa;
+                border-bottom: 1px solid #dee2e6;
+                font-size: 12px;
+                font-weight: 600;
+                color: #495057;
+            }
+
+            .diff-header-left,
+            .diff-header-right {
+                flex: 1;
+                padding: 8px 12px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+
+            .diff-header-left {
+                border-right: 1px solid #dee2e6;
+            }
+
+            .diff-header-left::before {
+                content: "📄";
+                font-size: 14px;
+            }
+
+            .diff-header-right::before {
+                content: "✏️";
+                font-size: 14px;
+            }
+
+            .btn.disabled,
+            .btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+                pointer-events: none;
+            }
+
+            .badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+            }
+
+            .header {
+                padding: 15px;
+                background: #f8f9fa;
+                border-bottom: 1px solid #dee2e6;
+            }
+        </style>
+    }
+}
+else
+{
+    <style>
+        /* Estilos inline para iframe */
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        
+        .monaco-iframe-container {
+            width: 100%;
+            height: 100vh;
+            border: none;
+            border-radius: 0;
+            overflow: hidden;
+            background: white;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .monaco-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            flex: 1;
+        }
+
+        .loading-overlay {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.9);
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .btn-group .btn.active {
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+            color: white;
+        }
+
+        .diff-stats {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 5px;
+        }
+
+        .diff-headers {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            font-size: 12px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .diff-header-left,
+        .diff-header-right {
+            flex: 1;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .diff-header-left {
+            border-right: 1px solid #dee2e6;
+        }
+
+        .diff-header-left::before {
+            content: "📄";
+            font-size: 14px;
+        }
+
+        .diff-header-right::before {
+            content: "✏️";
+            font-size: 14px;
+        }
+
+        .btn {
+            display: inline-block;
+            font-weight: 400;
+            line-height: 1.5;
+            color: #212529;
+            text-align: center;
+            text-decoration: none;
+            vertical-align: middle;
+            cursor: pointer;
+            user-select: none;
+            background-color: transparent;
+            border: 1px solid transparent;
+            padding: 0.375rem 0.75rem;
+            font-size: 0.875rem;
+            border-radius: 0.25rem;
+            transition: color .15s ease-in-out,background-color .15s ease-in-out,border-color .15s ease-in-out,box-shadow .15s ease-in-out;
+        }
+
+        .btn-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.775rem;
+            border-radius: 0.2rem;
+        }
+
+        .btn-outline-primary {
+            color: #0d6efd;
+            border-color: #0d6efd;
+        }
+
+        .btn-outline-primary:hover {
+            color: #fff;
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+        }
+
+        .btn-outline-info {
+            color: #0dcaf0;
+            border-color: #0dcaf0;
+        }
+
+        .btn-outline-info:hover {
+            color: #000;
+            background-color: #0dcaf0;
+            border-color: #0dcaf0;
+        }
+
+        .btn-outline-secondary {
+            color: #6c757d;
+            border-color: #6c757d;
+        }
+
+        .btn-outline-secondary:hover {
+            color: #fff;
+            background-color: #6c757d;
+            border-color: #6c757d;
+        }
+
+        .btn.disabled,
+        .btn:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.35em 0.65em;
+            font-size: 0.75em;
+            font-weight: 700;
+            line-height: 1;
+            color: #fff;
+            text-align: center;
+            white-space: nowrap;
+            vertical-align: baseline;
+            border-radius: 0.25rem;
+        }
+
+        .bg-success { background-color: #198754; }
+        .bg-danger { background-color: #dc3545; }
+        .bg-info { background-color: #0dcaf0; color: #000; }
+        .bg-warning { background-color: #ffc107; }
+        .text-dark { color: #212529; }
+
+        .container-fluid { width: 100%; padding: 0; margin: 0; }
+        .row { display: flex; flex-wrap: wrap; margin: 0; }
+        .col { flex: 1; padding: 0; }
+        .d-flex { display: flex; }
+        .justify-content-between { justify-content: space-between; }
+        .align-items-center { align-items: center; }
+        .mb-3 { margin-bottom: 1rem; }
+        .ms-3 { margin-left: 1rem; }
+        .ms-2 { margin-left: 0.5rem; }
+        .fw-bold { font-weight: 700; }
+        .text-muted { color: #6c757d; }
+
+        .iframe-header {
+            padding: 0.75rem;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            font-size: 0.9rem;
+        }
+
+        @@media (max-width: 768px) {
+            .header-actions {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            .btn-sm span { display: none; }
+        }
+    </style>
+}
+
+<div class="@(inIframe ? "" : "container-fluid")">
+    @if (!inIframe)
+    {
+        <!-- Header completo para vista standalone -->
+        <div class="row mb-3">
+            <div class="col">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <a class="btn btn-secondary" href="@ViewBag.ReturnUrl">
+                            <i class="bi bi-arrow-left"></i> Volver
+                        </a>
+                        <span class="ms-3 fw-bold">@Model.FileName</span>
+                        <small class="text-muted ms-2">@Model.FilePath</small>
+                    </div>
+
+                    <div class="header-actions">
+                        <div class="diff-stats">
+                            <span class="badge bg-success">+@Model.AddedLines</span>
+                            <span class="badge bg-danger">-@Model.DeletedLines</span>
+                            @if (!string.IsNullOrWhiteSpace(Model.OriginalContent) && string.IsNullOrWhiteSpace(Model.ModifiedContent))
+                            {
+                                <span class="badge bg-warning text-dark">
+                                    <i class="bi bi-file-minus"></i> Archivo eliminado
+                                </span>
+                            }
+                            else if (string.IsNullOrWhiteSpace(Model.OriginalContent) && !string.IsNullOrWhiteSpace(Model.ModifiedContent))
+                            {
+                                <span class="badge bg-info">
+                                    <i class="bi bi-file-plus"></i> Archivo nuevo
+                                </span>
+                            }
+                        </div>
+
+                        <div class="nav-buttons">
+                            <button type="button" class="btn btn-sm btn-outline-info" onclick="goToPrevDiff()" title="Diferencia anterior (Ctrl+↑)" id="prevDiffBtn">
+                                <i class="bi bi-arrow-up-circle"></i> Anterior
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-info" onclick="goToNextDiff()" title="Siguiente diferencia (Ctrl+↓)" id="nextDiffBtn">
+                                <i class="bi bi-arrow-down-circle"></i> Siguiente
+                            </button>
+                        </div>
+
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="changeViewMode('split')" id="splitBtn" title="Vista lado a lado">
+                                <i class="bi bi-layout-split"></i> Split
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="changeViewMode('inline')" id="inlineBtn" title="Vista unificada">
+                                <i class="bi bi-file-diff"></i> Inline
+                            </button>
+                        </div>
+
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm btn-outline-secondary active" onclick="toggleLineNumbers()" title="Mostrar/ocultar números de línea y símbolos +/-">
+                                <i class="bi bi-list-ol"></i> Líneas
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- Header compacto para iframe -->
+        <div class="iframe-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="fw-bold">@Model.FileName</span>
+                    <small class="text-muted ms-2">@Model.FilePath</small>
+                </div>
+
+                <div class="header-actions">
+                    <div class="diff-stats">
+                        <span class="badge bg-success">+@Model.AddedLines</span>
+                        <span class="badge bg-danger">-@Model.DeletedLines</span>
+                        @if (!string.IsNullOrWhiteSpace(Model.OriginalContent) && string.IsNullOrWhiteSpace(Model.ModifiedContent))
+                        {
+                            <span class="badge bg-warning text-dark">Eliminado</span>
+                        }
+                        else if (string.IsNullOrWhiteSpace(Model.OriginalContent) && !string.IsNullOrWhiteSpace(Model.ModifiedContent))
+                        {
+                            <span class="badge bg-info">Nuevo</span>
+                        }
+                    </div>
+
+                    <div class="nav-buttons">
+                        <button type="button" class="btn btn-sm btn-outline-info" onclick="goToPrevDiff()" title="Diferencia anterior (Ctrl+↑)" id="prevDiffBtn">
+                            ↑ <span>Anterior</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-info" onclick="goToNextDiff()" title="Siguiente diferencia (Ctrl+↓)" id="nextDiffBtn">
+                            ↓ <span>Siguiente</span>
+                        </button>
+                    </div>
+
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="changeViewMode('split')" id="splitBtn" title="Vista lado a lado">
+                            ⚏ <span>Split</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="changeViewMode('inline')" id="inlineBtn" title="Vista unificada">
+                            ☰ <span>Inline</span>
+                        </button>
+                    </div>
+
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-sm btn-outline-secondary active" onclick="toggleLineNumbers()" title="Mostrar/ocultar números de línea">
+                            # <span>Líneas</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Container para el iframe de Monaco -->
+    <div class="@(inIframe ? "" : "row")">
+        <div class="@(inIframe ? "" : "col")">
+            <div class="monaco-iframe-container">
+                <!-- Headers para identificar archivos -->
+                <div class="diff-headers" id="diffHeaders">
+                    <div class="diff-header-left">
+                        @if (string.IsNullOrWhiteSpace(Model.OriginalContent))
+                        {
+                            <span class="text-muted">Archivo nuevo</span>
+                        }
+                        else
+                        {
+                            <span>Archivo Original</span>
+                        }
+                    </div>
+                    <div class="diff-header-right">
+                        @if (string.IsNullOrWhiteSpace(Model.ModifiedContent))
+                        {
+                            <span class="text-muted">Archivo eliminado</span>
+                        }
+                        else
+                        {
+                            <span>Archivo Modificado</span>
+                        }
+                    </div>
+                </div>
+
+                <div id="loadingOverlay" class="loading-overlay">
+                    <div style="text-align: center;">
+                        <div style="border: 4px solid #f3f3f3; border-top: 4px solid #0d6efd; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto;"></div>
+                        <p style="margin-top: 1rem;">Cargando editor de código...</p>
+                    </div>
+                </div>
+                <iframe id="monacoIframe" class="monaco-iframe" style="display: none;"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (!inIframe)
+{
+    @section Scripts {
+        <script>
+            // Exponer datos globalmente para el archivo JS externo
+            window.editorData = {
+                originalContent: @Html.Raw(Json.Serialize(Model.OriginalContent ?? "")),
+                modifiedContent: @Html.Raw(Json.Serialize(Model.ModifiedContent ?? "")),
+                language: '@(Model.Language ?? "plaintext")',
+                fileName: '@Model.FileName',
+                filePath: '@Model.FilePath'
+            };
+        </script>
+        <script src="~/js/monaco-diff.js"></script>
+    }
+}
+else
+{
+    <script>
+        @* El mismo JavaScript pero inline para el iframe *@
+        // Todos tus scripts originales van aquí inline
+        @Html.Raw(@"
+            // Datos para el editor
+            const editorData = {
+                originalContent: " + Json.Serialize(Model.OriginalContent ?? "") + @",
+                modifiedContent: " + Json.Serialize(Model.ModifiedContent ?? "") + @",
+                language: '" + (Model.Language ?? "plaintext") + @"',
+                fileName: '" + Model.FileName + @"',
+                filePath: '" + Model.FilePath + @"'
+            };
+
+            // Detectar si es un archivo nuevo (original vacío)
+            const isNewFile = !editorData.originalContent || editorData.originalContent.trim() === '';
+            const isDeletedFile = !editorData.modifiedContent || editorData.modifiedContent.trim() === '';
+
+            let currentViewMode = isNewFile || isDeletedFile ? 'inline' : 'split';
+            let monacoIframe = null;
+            let showLineNumbers = true;
+            let isMonacoReady = false;
+            let isInIframe = true; // Flag para comportamiento específico de iframe
+
+            // Función para inicializar el iframe con archivo estático
+            function initializeMonacoIframe() {
+                const iframe = document.getElementById('monacoIframe');
+                const loadingOverlay = document.getElementById('loadingOverlay');
+
+                // Usar encodeURIComponent solo una vez
+                const params = new URLSearchParams({
+                    original: editorData.originalContent,  // Sin encode aquí
+                    modified: editorData.modifiedContent,  // Sin encode aquí
+                    language: editorData.language,
+                    fileName: editorData.fileName,
+                    initialViewMode: currentViewMode
+                });
+
+                // URLSearchParams ya maneja el encoding correctamente
+                iframe.src = '/monaco-diff.html?' + params.toString();
+    
+                // O alternativamente:
+                // iframe.src = '/monaco-diff.html?original=' + encodeURIComponent(editorData.originalContent) + 
+                //              '&modified=' + encodeURIComponent(editorData.modifiedContent) + 
+                //              '&language=' + editorData.language + 
+                //              '&fileName=' + encodeURIComponent(editorData.fileName) + 
+                //              '&initialViewMode=' + currentViewMode;
+    
+                iframe.style.display = 'block';
+                loadingOverlay.style.display = 'none';
+                monacoIframe = iframe;
+            }
+
+            // Resto de funciones originales...
+            function changeViewMode(mode) {
+                if (mode === 'split' && (isNewFile || isDeletedFile)) {
+                    console.warn('Vista split no disponible para archivos nuevos o eliminados');
+                    return;
+                }
+
+                currentViewMode = mode;
+                sendMessage({ type: 'changeViewMode', mode: mode });
+                updateButtonState(event.target, '.btn-group .btn');
+                updateHeadersVisibility();
+            }
+
+            function toggleLineNumbers() {
+                showLineNumbers = !showLineNumbers;
+                sendMessage({ type: 'toggleLineNumbers', show: showLineNumbers });
+                event.target.classList.toggle('active');
+            }
+
+            function updateHeadersVisibility() {
+                const headers = document.getElementById('diffHeaders');
+                if (currentViewMode === 'split') {
+                    headers.style.display = 'flex';
+                } else {
+                    headers.style.display = 'none';
+                }
+            }
+
+            function updateUIForFileType() {
+                const splitBtn = document.getElementById('splitBtn');
+                const inlineBtn = document.getElementById('inlineBtn');
+                const prevBtn = document.getElementById('prevDiffBtn');
+                const nextBtn = document.getElementById('nextDiffBtn');
+
+                if (isNewFile || isDeletedFile) {
+                    splitBtn.disabled = true;
+                    splitBtn.classList.add('disabled');
+                    splitBtn.title = isNewFile ? 'No disponible para archivos nuevos' : 'No disponible para archivos eliminados';
+                    inlineBtn.classList.add('active');
+                    splitBtn.classList.remove('active');
+                    prevBtn.disabled = false;
+                    nextBtn.disabled = false;
+                } else {
+                    splitBtn.disabled = false;
+                    splitBtn.classList.remove('disabled');
+                    splitBtn.classList.add('active');
+                    splitBtn.title = 'Vista lado a lado';
+                    inlineBtn.classList.remove('active');
+                }
+            }
+
+            function goToNextDiff() {
+                sendMessage({ type: 'goToNextDiff' });
+            }
+
+            function goToPrevDiff() {
+                sendMessage({ type: 'goToPrevDiff' });
+            }
+
+            function sendMessage(message) {
+                if (monacoIframe && monacoIframe.contentWindow) {
+                    monacoIframe.contentWindow.postMessage(message, '*');
+                }
+            }
+
+            function updateButtonState(activeButton, selector) {
+                document.querySelectorAll(selector).forEach(btn => btn.classList.remove('active'));
+                activeButton.classList.add('active');
+            }
+
+            // Listener para mensajes del iframe de Monaco
+            window.addEventListener('message', function (event) {
+                switch (event.data.type) {
+                    case 'monacoReady':
+                        isMonacoReady = true;
+                        console.log('Monaco Editor está listo');
+
+                        if (event.data.initialViewMode && event.data.initialViewMode !== currentViewMode) {
+                            currentViewMode = event.data.initialViewMode;
+                            const splitBtn = document.getElementById('splitBtn');
+                            const inlineBtn = document.getElementById('inlineBtn');
+
+                            if (currentViewMode === 'inline') {
+                                splitBtn.classList.remove('active');
+                                inlineBtn.classList.add('active');
+                            } else {
+                                splitBtn.classList.add('active');
+                                inlineBtn.classList.remove('active');
+                            }
+                            updateHeadersVisibility();
+                        }
+                        break;
+                    case 'requestData':
+                        sendMessage({ type: 'editorData', ...editorData });
+                        break;
+                }
+            });
+
+            // Shortcuts de teclado
+            document.addEventListener('keydown', function (e) {
+                if (e.ctrlKey || e.metaKey) {
+                    switch (e.key) {
+                        case 'ArrowDown':
+                            e.preventDefault();
+                            goToNextDiff();
+                            break;
+                        case 'ArrowUp':
+                            e.preventDefault();
+                            goToPrevDiff();
+                            break;
+                    }
+                }
+            });
+
+            // Inicializar
+            document.addEventListener('DOMContentLoaded', function () {
+                updateUIForFileType();
+                setTimeout(initializeMonacoIframe, 200);
+                updateHeadersVisibility();
+                
+                // Notificar al padre que estamos listos
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'iframeReady'
+                    }, '*');
+                }
+            });
+
+            // CSS para la animación del spinner
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+            `;
+            document.head.appendChild(style);
+        ")
+    </script>
+}

@@ -1,0 +1,18 @@
+--------ENCABEZADO DEL SCRIPT-----------------------------------
+--INCIDENTE: 
+--ANALISTA TECNICO: 
+--ANALISTA FUNCIONAL:
+--DESCRIPCION: Creación de SP 
+--OBSERVACION: 
+-----------------------------------------------------------------
+
+IF OBJECT_ID('dbo.NOMBRE_SP') IS NULL --Si no existe el SP
+EXEC('CREATE PROCEDURE dbo.NOMBRE_SP AS SET NOCOUNT ON;') -- CREA un SP con el mismo nombre pero vacio
+GO
+
+ALTER PROCEDURE dbo.NOMBRE_SP -- modifica siempre el SP, ya sea el creado Vacio o el que ya Existe manteniendo sus permisos
+@Parametro INT
+AS
+BEGIN
+--Logica del SP
+END

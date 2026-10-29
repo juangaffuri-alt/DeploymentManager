@@ -1,0 +1,166 @@
+﻿@model PasadorScript.ViewModels.MiTurnoDetalleViewModel
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/turnos.css" />
+}
+
+@{
+    ViewData["Title"] = "Mi Turno";
+}
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a asp-action="Index"><i class="fas fa-home"></i> Dashboard</a></li>
+                    <li class="breadcrumb-item active">Mi Turno</li>
+                </ol>
+            </nav>
+
+            <div class="card shadow">
+                <div class="card-header @(Model.EsMiTurno ? "bg-success" : "bg-info") text-white">
+                    <h4 class="mb-0">
+                        @if (Model.EsMiTurno)
+                        {
+                            <i class="fas fa-check-circle"></i> <span>¡Es tu turno en @Model.EntornoNombre!</span>
+                        }
+                        else
+                        {
+                            <i class="fas fa-clock"></i> <span>Turno solicitado en @Model.EntornoNombre</span>
+                        }
+                    </h4>
+                </div>
+
+                <div class="card-body">
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center mb-3">
+                                <div class="bg-light rounded-circle p-3 me-3"><i class="fas fa-calendar-alt fa-2x text-primary"></i></div>
+                                <div><small class="text-muted">Fecha de solicitud</small><p class="h5 mb-0">@Model.FechaSolicitud.ToString("dd/MM/yyyy HH:mm")</p></div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center mb-3">
+                                <div class="bg-light rounded-circle p-3 me-3"><i class="fas fa-clock fa-2x text-primary"></i></div>
+                                <div><small class="text-muted">Nueva fecha</small><p class="h5 mb-0">@Model.FechaSolicitada.ToString("dd/MM/yyyy")</p></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (Model.FechaActual.HasValue)
+                    {
+                        <div class="alert alert-info mb-3">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Fecha actual del entorno: <strong>@Model.FechaActual.Value.ToString("dd/MM/yyyy")</strong>
+                        </div>
+                    }
+
+                    @if (Model.EsMiTurno)
+                    {
+                        <div class="alert alert-success text-center p-4 mb-4">
+                            <i class="fas fa-user-edit fa-4x mb-3"></i>
+                            <h4>Tienes el control del entorno @Model.EntornoNombre</h4>
+                            @if (!Model.Ejecutado)
+                            {
+                                <p class="lead mb-2">El cambio se ejecutará en <strong class="@(Model.MinutosParaEjecucionRestantes <= 2 ? "text-danger" : "")">@Model.MinutosParaEjecucionRestantes minutos</strong></p>
+                                <p class="text-muted"><i class="fas fa-hourglass-start"></i> Espera programada: @Model.MinutosParaEjecucion minutos</p>
+                            }
+                            else
+                            {
+                                <p class="lead mb-2">Cambio ejecutado a las @Model.FechaEjecucion.Value.ToString("HH:mm")</p>
+                                <p class="lead mb-0">Tiempo restante de modificación: <strong class="@(Model.MinutosRestantes <= 5 ? "text-danger" : "")">@Model.MinutosRestantes minutos</strong></p>
+                            }
+                        </div>
+
+                        <div class="mb-4">
+                            @if (!Model.Ejecutado)
+                            {
+                                var porcentajePre = 100 - ((double)Model.MinutosParaEjecucionRestantes / Model.MinutosParaEjecucion * 100);
+                                <label class="form-label">Tiempo para ejecución:</label>
+                                <div class="progress" style="height:25px;">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-info" style="width: @porcentajePre%">@Model.MinutosParaEjecucionRestantes min restantes</div>
+                                </div>
+                            }
+                            else
+                            {
+                                var porcentajePost = 100 - ((double)Model.MinutosRestantes / Model.MinutosDuracion * 100);
+                                <label class="form-label">Progreso de modificación:</label>
+                                <div class="progress" style="height:25px;">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: @porcentajePost%">@Model.MinutosRestantes min restantes</div>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="d-grid gap-3">
+                            @if (!Model.Ejecutado)
+                            {
+                                <a asp-action="Modificando" asp-route-id="@Model.Id" class="btn btn-info btn-lg"><i class="fas fa-eye"></i> Ver estado de ejecución</a>
+                            }
+                            else
+                            {
+                                <a asp-action="Modificando" asp-route-id="@Model.Id" class="btn btn-success btn-lg"><i class="fas fa-play"></i> Ir a modificar entorno</a>
+                            }
+                            <button class="btn btn-outline-danger btn-lg" onclick="confirmarLiberacion()"><i class="fas fa-stop"></i> Liberar turno (finalicé)</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-info text-center p-4 mb-4">
+                            <i class="fas fa-hourglass-half fa-4x mb-3"></i>
+                            <h4>Posición en cola: #@Model.PosicionCola</h4>
+                            <p class="lead mb-0">Tiempo estimado de espera: <strong>@Model.TiempoEspera minutos</strong></p>
+                        </div>
+
+                        @if (Model.ProgresoEspera > 0)
+                        {
+                            <div class="mb-4">
+                                <label class="form-label">Progreso de espera:</label>
+                                <div class="progress" style="height:20px;">
+                                    <div class="progress-bar progress-bar-striped" style="width: @Model.ProgresoEspera%">@Model.ProgresoEspera.ToString("F0")%</div>
+                                </div>
+                            </div>
+                        }
+
+                        <div class="card bg-light mb-4">
+                            <div class="card-body">
+                                <h6><i class="fas fa-info-circle"></i> Detalles de tu solicitud:</h6>
+                                <ul class="mb-0">
+                                    <li>Personas delante: @(Model.PosicionCola - 1)</li>
+                                    <li>Minutos hasta ejecución (Y): @Model.MinutosParaEjecucion</li>
+                                    <li>Minutos de duración (Z): @Model.MinutosDuracion</li>
+                                    <li>Espera total aproximada: @Model.TiempoEspera minutos</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(Model.Motivo))
+                        {
+                            <div class="mb-4">
+                                <label class="form-label fw-bold">Motivo de la solicitud:</label>
+                                <p class="border rounded p-3 bg-light">@Model.Motivo</p>
+                            </div>
+                        }
+
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-outline-secondary" onclick="confirmarCancelacion()"><i class="fas fa-times"></i> Cancelar solicitud</button>
+                            <small class="text-muted text-center mt-2"><i class="fas fa-clock"></i> Puedes cancelar mientras estés en cola</small>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modales (sin cambios) -->
+<div class="modal fade" id="modalLiberar" tabindex="-1">...</div>
+<div class="modal fade" id="modalCancelar" tabindex="-1">...</div>
+
+@section Scripts {
+    <script>
+        function confirmarLiberacion() { new bootstrap.Modal(document.getElementById('modalLiberar')).show(); }
+        function confirmarCancelacion() { new bootstrap.Modal(document.getElementById('modalCancelar')).show(); }
+        setTimeout(function() { location.reload(); }, 15000);
+    </script>
+}

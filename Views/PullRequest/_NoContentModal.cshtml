@@ -1,0 +1,945 @@
+﻿@model PasadorScript.ViewModels.MonacoDiffModel
+
+@{
+    Layout = null;
+    var isNewFile = string.IsNullOrWhiteSpace(Model.OriginalContent);
+    var isDeletedFile = string.IsNullOrWhiteSpace(Model.ModifiedContent);
+    var hasNoHistory = isNewFile || isDeletedFile;
+    var fileName = Model.FileName ?? "Archivo desconocido";
+    var fileExtension = System.IO.Path.GetExtension(fileName).ToUpper().Replace(".", "") ?? "SQL";
+}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sin Diferencias - @fileName</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #6366f1;
+            --primary-light: #818cf8;
+            --warning-color: #f59e0b;
+            --warning-light: #fbbf24;
+            --info-color: #3b82f6;
+            --info-light: #60a5fa;
+            --success-color: #10b981;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            --radius: 12px;
+            --radius-sm: 8px;
+            --radius-lg: 16px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--gray-800);
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 30px;
+            background: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            position: relative;
+            overflow: hidden;
+        }
+
+            .header::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 4px;
+                background: linear-gradient(90deg, var(--primary-color), var(--warning-color));
+            }
+
+        .main-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, var(--warning-color), var(--warning-light));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 4px 6px rgba(245, 158, 11, 0.2));
+        }
+
+        .title {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, var(--gray-900), var(--gray-700));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            font-size: 18px;
+            color: var(--gray-600);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+
+        .card {
+            background: white;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 30px;
+            transition: all 0.3s ease;
+            border: 1px solid var(--gray-200);
+        }
+
+            .card:hover {
+                transform: translateY(-5px);
+                box-shadow: var(--shadow-lg);
+                border-color: var(--primary-light);
+            }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .card-icon {
+            font-size: 28px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+
+        .card-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--gray-900);
+            margin-bottom: 5px;
+        }
+
+        .card-subtitle {
+            font-size: 14px;
+            color: var(--gray-500);
+        }
+
+        .card-content {
+            font-size: 15px;
+            color: var(--gray-700);
+            line-height: 1.7;
+        }
+
+            .card-content ul {
+                list-style: none;
+                padding-left: 0;
+            }
+
+            .card-content li {
+                padding: 8px 0;
+                display: flex;
+                align-items: flex-start;
+            }
+
+                .card-content li i {
+                    color: var(--success-color);
+                    margin-right: 10px;
+                    margin-top: 3px;
+                    flex-shrink: 0;
+                }
+
+        .file-info {
+            background: white;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 30px;
+            margin-bottom: 40px;
+        }
+
+        .file-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--gray-100);
+        }
+
+        .file-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, var(--info-color), var(--info-light));
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 20px;
+            color: white;
+            font-size: 24px;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+
+        .file-details h3 {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 5px;
+        }
+
+        .file-details p {
+            color: var(--gray-600);
+            font-size: 15px;
+        }
+
+        .file-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .info-item {
+            padding: 15px;
+            background: var(--gray-50);
+            border-radius: var(--radius-sm);
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .info-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--gray-500);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--gray-900);
+            word-break: break-all;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            margin-left: 10px;
+        }
+
+        .badge-new {
+            background: linear-gradient(135deg, var(--success-color), #34d399);
+            color: white;
+        }
+
+        .badge-deleted {
+            background: linear-gradient(135deg, #ef4444, #f87171);
+            color: white;
+        }
+
+        .badge-history {
+            background: linear-gradient(135deg, var(--warning-color), var(--warning-light));
+            color: white;
+        }
+
+        .actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .action-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: white;
+            border: 2px solid var(--gray-200);
+            border-radius: var(--radius);
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--gray-800);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+
+            .action-btn:hover {
+                background: var(--gray-50);
+                border-color: var(--primary-color);
+                color: var(--primary-color);
+                transform: translateY(-3px);
+                box-shadow: var(--shadow);
+            }
+
+            .action-btn i {
+                font-size: 20px;
+                margin-right: 12px;
+            }
+
+        .primary-btn {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+            color: white;
+            border: none;
+            grid-column: 1 / -1;
+        }
+
+            .primary-btn:hover {
+                background: linear-gradient(135deg, var(--primary-light), var(--primary-color));
+                color: white;
+                box-shadow: 0 10px 25px rgba(99, 102, 241, 0.3);
+            }
+
+        .note {
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
+            border: 1px solid #fbbf24;
+            border-radius: var(--radius);
+            padding: 25px;
+            margin-bottom: 40px;
+        }
+
+        .note-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .note-icon {
+            font-size: 24px;
+            color: #d97706;
+            margin-right: 15px;
+        }
+
+        .note h4 {
+            font-size: 18px;
+            font-weight: 700;
+            color: #92400e;
+        }
+
+        .note p {
+            color: #92400e;
+            font-size: 15px;
+            line-height: 1.7;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 30px 0;
+        }
+
+        .status-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0 20px;
+            position: relative;
+        }
+
+            .status-item:not(:last-child)::after {
+                content: '';
+                position: absolute;
+                top: 25px;
+                right: -10px;
+                width: 40px;
+                height: 2px;
+                background: var(--gray-300);
+            }
+
+        .status-circle {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            box-shadow: var(--shadow);
+        }
+
+            .status-circle.active {
+                background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+                color: white;
+            }
+
+            .status-circle.inactive {
+                background: var(--gray-200);
+                color: var(--gray-500);
+            }
+
+        .status-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-700);
+            text-align: center;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: var(--gray-500);
+            font-size: 14px;
+            border-top: 1px solid var(--gray-200);
+            margin-top: 40px;
+        }
+
+            .footer a {
+                color: var(--primary-color);
+                text-decoration: none;
+                font-weight: 600;
+            }
+
+                .footer a:hover {
+                    text-decoration: underline;
+                }
+
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: help;
+        }
+
+            .tooltip .tooltip-text {
+                visibility: hidden;
+                width: 250px;
+                background-color: var(--gray-900);
+                color: white;
+                text-align: center;
+                border-radius: var(--radius-sm);
+                padding: 10px;
+                position: absolute;
+                z-index: 1;
+                bottom: 125%;
+                left: 50%;
+                transform: translateX(-50%);
+                opacity: 0;
+                transition: opacity 0.3s;
+                font-size: 13px;
+                font-weight: normal;
+                box-shadow: var(--shadow-lg);
+            }
+
+                .tooltip .tooltip-text::after {
+                    content: "";
+                    position: absolute;
+                    top: 100%;
+                    left: 50%;
+                    margin-left: -5px;
+                    border-width: 5px;
+                    border-style: solid;
+                    border-color: var(--gray-900) transparent transparent transparent;
+                }
+
+            .tooltip:hover .tooltip-text {
+                visibility: visible;
+                opacity: 1;
+            }
+
+        @@media (max-width: 768px) {
+            .header {
+                padding: 20px;
+            }
+
+            .title {
+                font-size: 24px;
+            }
+
+            .subtitle {
+                font-size: 16px;
+            }
+
+            .cards-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .status-indicator {
+                flex-direction: column;
+            }
+
+            .status-item:not(:last-child)::after {
+                display: none;
+            }
+
+            .status-item:not(:last-child) {
+                margin-bottom: 30px;
+            }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @@keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .highlight {
+            background: linear-gradient(120deg, rgba(99, 102, 241, 0.1) 0%, rgba(99, 102, 241, 0) 100%);
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="main-icon">
+                <i class="fas fa-layer-group"></i>
+            </div>
+            <h1 class="title">No se encontraron diferencias</h1>
+            <p class="subtitle">
+                No hay cambios detectados entre las versiones de este archivo
+                @if (hasNoHistory)
+                {
+                    <span class="badge @(isNewFile ? "badge-new" : "badge-deleted")">
+                        @(isNewFile ? "ARCHIVO NUEVO" : "ARCHIVO ELIMINADO")
+                    </span>
+                }
+            </p>
+        </div>
+
+        <!-- Status Indicator -->
+        <div class="status-indicator">
+            <div class="status-item">
+                <div class="status-circle @(hasNoHistory ? "inactive" : "active")">
+                    <i class="fas fa-code-branch"></i>
+                </div>
+                <div class="status-label">Historial</div>
+            </div>
+            <div class="status-item">
+                <div class="status-circle @(hasNoHistory ? "inactive" : "active")">
+                    <i class="fas fa-exchange-alt"></i>
+                </div>
+                <div class="status-label">Comparación</div>
+            </div>
+            <div class="status-item">
+                <div class="status-circle inactive">
+                    <i class="fas fa-file-diff"></i>
+                </div>
+                <div class="status-label">Diferencias</div>
+            </div>
+        </div>
+
+        <!-- Cards Grid -->
+        <div class="cards-grid">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: linear-gradient(135deg, #8b5cf6, #a78bfa); color: white;">
+                        <i class="fas fa-info-circle"></i>
+                    </div>
+                    <div>
+                        <h3 class="card-title">¿Por qué no hay diferencias?</h3>
+                        <p class="card-subtitle">Comprendiendo el resultado</p>
+                    </div>
+                </div>
+                <div class="card-content">
+                    <ul>
+                        <li>
+                            <i class="fas fa-check-circle"></i>
+                            <div>
+                                <strong>Archivo idéntico:</strong> El contenido es exactamente igual en ambas versiones
+                            </div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle"></i>
+                            <div>
+                                <strong>Sin historial:</strong>
+                                @if (isNewFile)
+                                {
+                                    <span>Este es un archivo <span class="highlight">completamente nuevo</span> sin versión anterior</span>
+                                }
+                                else if (isDeletedFile)
+                                {
+                                    <span>Este archivo fue <span class="highlight">eliminado</span> y no tiene versión actual</span>
+                                }
+                                else
+                                {
+                                    <span>No hay versiones anteriores para comparar</span>
+                                }
+                            </div>
+                        </li>
+                        <li>
+                            <i class="fas fa-check-circle"></i>
+                            <div>
+                                <strong>Azure DevOps:</strong> Solo archivos con historial pueden mostrar diferencias
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: linear-gradient(135deg, #10b981, #34d399); color: white;">
+                        <i class="fas fa-lightbulb"></i>
+                    </div>
+                    <div>
+                        <h3 class="card-title">¿Qué puedes hacer?</h3>
+                        <p class="card-subtitle">Siguientes pasos recomendados</p>
+                    </div>
+                </div>
+                <div class="card-content">
+                    <ul>
+                        <li>
+                            <i class="fas fa-arrow-right"></i>
+                            <div>Revisar el contenido actual del archivo</div>
+                        </li>
+                        <li>
+                            <i class="fas fa-arrow-right"></i>
+                            <div>Verificar el historial en Azure DevOps</div>
+                        </li>
+                        <li>
+                            <i class="fas fa-arrow-right"></i>
+                            <div>Asegurar que el archivo tenga commits anteriores</div>
+                        </li>
+                        <li>
+                            <i class="fas fa-arrow-right"></i>
+                            <div>Contactar al administrador si necesitas acceso al historial</div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- File Information -->
+        <div class="file-info">
+            <div class="file-header">
+                <div class="file-icon pulse">
+                    @fileExtension
+                </div>
+                <div class="file-details">
+                    <h3>
+                        @fileName
+                        @if (isNewFile)
+                        {
+                            <span class="badge badge-new">NUEVO</span>
+                        }
+                        else if (isDeletedFile)
+                        {
+                            <span class="badge badge-deleted">ELIMINADO</span>
+                        }
+                        else
+                        {
+                            <span class="badge badge-history">SIN HISTORIAL</span>
+                        }
+                    </h3>
+                    <p class="tooltip">
+                        @Model.FilePath
+                        <span class="tooltip-text">Ruta completa del archivo en el repositorio</span>
+                    </p>
+                </div>
+            </div>
+            <div class="file-grid">
+                <div class="info-item">
+                    <div class="info-label">Tipo de archivo</div>
+                    <div class="info-value">
+                        <i class="fas fa-file-code"></i> Archivo @fileExtension
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Pull Request ID</div>
+                    <div class="info-value">
+                        <i class="fas fa-code-branch"></i> #@Model.PRId
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Estado</div>
+                    <div class="info-value">
+                        <i class="fas fa-circle @(hasNoHistory ? "text-warning" : "text-info")"></i>
+                        @(hasNoHistory ? "Sin historial" : "Sin cambios")
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Última actualización</div>
+                    <div class="info-value">
+                        <i class="far fa-clock"></i> @DateTime.Now.ToString("dd/MM/yyyy HH:mm")
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Important Note -->
+        <div class="note">
+            <div class="note-header">
+                <i class="fas fa-exclamation-triangle note-icon"></i>
+                <h4>Información importante sobre Azure DevOps</h4>
+            </div>
+            <p>
+                Esta vista de diferencias solo está disponible para archivos que tienen un historial registrado en Azure DevOps.
+                Si el archivo es nuevo, fue eliminado o no tiene commits anteriores, no se podrán mostrar diferencias.
+                Para acceder al historial completo, consulta directamente el repositorio en Azure DevOps.
+            </p>
+        </div>
+
+        
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>
+                <i class="fas fa-database"></i> DeploymentManager 
+            </p>
+            <p style="font-size: 12px; margin-top: 10px; opacity: 0.7;">
+                ID de sesión: @Guid.NewGuid().ToString().Substring(0, 8).ToUpper() |
+                Versión 2.0
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Obtener datos del modelo
+        const fileContent = '@Html.Raw(Model.OriginalContent)';
+        const fileName = '@fileName';
+        const filePath = '@Model.FilePath';
+        const prId = @Model.PRId;
+
+        // Funciones principales
+        function viewFileContent() {
+            if (!fileContent || fileContent === '""') {
+                showNotification('No hay contenido disponible para mostrar', 'warning');
+                return;
+            }
+
+            const content = JSON.parse(fileContent);
+            const modalContent = `
+                <div class="modal-backdrop" id="contentModalBackdrop" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9998;"></div>
+                <div id="contentModal" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); z-index: 9999; width: 90%; max-width: 800px; max-height: 80vh; display: flex; flex-direction: column;">
+                    <div style="padding: 20px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
+                        <h3 style="margin: 0; font-size: 18px; font-weight: 600; color: #111827;">
+                            <i class="fas fa-file-code" style="color: #6366f1; margin-right: 10px;"></i>
+                            ${fileName}
+                        </h3>
+                        <button onclick="closeContentModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #6b7280;">×</button>
+                    </div>
+                    <pre style="padding: 25px; margin: 0; overflow: auto; flex: 1; font-family: 'Consolas', monospace; font-size: 13px; line-height: 1.5; background: #f9fafb; border-radius: 0 0 12px 12px;">${escapeHtml(content)}</pre>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', modalContent);
+
+            // Evitar scroll en el body
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeContentModal() {
+            const backdrop = document.getElementById('contentModalBackdrop');
+            const modal = document.getElementById('contentModal');
+
+            if (backdrop) backdrop.remove();
+            if (modal) modal.remove();
+
+            document.body.style.overflow = '';
+        }
+
+        function copyFileInfo() {
+            const info = `
+                📄 ARCHIVO SIN DIFERENCIAS
+
+                Nombre: ${fileName}
+                Ruta: ${filePath}
+                PR ID: ${prId}
+                Estado: ${'@(hasNoHistory ? "Sin historial" : "Sin cambios")'}
+                Fecha: ${new Date().toLocaleString()}
+
+                Nota: No se encontraron diferencias con versiones anteriores.
+                ${hasNoHistory ? 'Este archivo ' + (isNewFile ? 'es nuevo' : 'fue eliminado') + ' y no tiene historial.' : ''}
+            `;
+
+            navigator.clipboard.writeText(info)
+                .then(() => showNotification('Información copiada al portapapeles', 'success'))
+                .catch(() => showNotification('Error al copiar información', 'error'));
+        }
+
+        function openAzureDevOps() {
+            // Aquí puedes construir la URL a Azure DevOps
+            const url = `https://dev.azure.com/...`; // Completa con tu URL base
+            window.open(url, '_blank');
+        }
+
+        function closeModal() {
+            // Cerrar el iframe o modal padre
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: 'closeDiffModal' }, '*');
+            } else {
+                showNotification('Presiona el botón de cerrar en la ventana principal', 'info');
+            }
+        }
+
+        function showHelp() {
+            const helpContent = `
+                <div class="modal-backdrop" id="helpBackdrop" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9998;"></div>
+                <div id="helpModal" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border-radius: 12px; padding: 30px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); z-index: 9999; width: 90%; max-width: 500px;">
+                    <h3 style="margin-top: 0; color: #111827; display: flex; align-items: center;">
+                        <i class="fas fa-question-circle" style="color: #6366f1; margin-right: 10px;"></i>
+                        Ayuda - Sin diferencias
+                    </h3>
+                    <p style="color: #4b5563; line-height: 1.6; margin-bottom: 20px;">
+                        Esta vista aparece cuando no se pueden mostrar diferencias entre versiones de un archivo.
+                        Las causas más comunes son:
+                    </p>
+                    <ul style="color: #4b5563; line-height: 1.6; margin-bottom: 25px; padding-left: 20px;">
+                        <li>El archivo es nuevo y no tiene versiones anteriores</li>
+                        <li>El archivo fue eliminado</li>
+                        <li>No hay historial disponible en Azure DevOps</li>
+                        <li>El contenido es idéntico en ambas versiones</li>
+                    </ul>
+                    <div style="display: flex; justify-content: flex-end;">
+                        <button onclick="closeHelpModal()" style="padding: 10px 20px; background: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Entendido</button>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', helpContent);
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeHelpModal() {
+            const backdrop = document.getElementById('helpBackdrop');
+            const modal = document.getElementById('helpModal');
+
+            if (backdrop) backdrop.remove();
+            if (modal) modal.remove();
+
+            document.body.style.overflow = '';
+        }
+
+        // Utilidades
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function showNotification(message, type = 'info') {
+            const colors = {
+                success: '#10b981',
+                error: '#ef4444',
+                warning: '#f59e0b',
+                info: '#3b82f6'
+            };
+
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${colors[type]};
+                color: white;
+                padding: 15px 20px;
+                border-radius: 8px;
+                box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+                z-index: 10000;
+                display: flex;
+                align-items: center;
+                animation: slideIn 0.3s ease;
+                max-width: 400px;
+            `;
+
+            notification.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"
+                   style="margin-right: 10px; font-size: 18px;"></i>
+                <span>${message}</span>
+            `;
+
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        // Estilos para animaciones de notificación
+        const style = document.createElement('style');
+        style.textContent = `
+            @@keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @@keyframes slideOut {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(100%); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Escuchar mensajes del padre
+        window.addEventListener('message', function(event) {
+            if (event.data.type === 'closeModal') {
+                closeModal();
+            }
+        });
+
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Vista de sin diferencias cargada');
+
+            // Si estamos en un iframe, ajustar altura
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'iframeHeight',
+                    height: document.body.scrollHeight
+                }, '*');
+            }
+        });
+    </script>
+</body>
+</html>

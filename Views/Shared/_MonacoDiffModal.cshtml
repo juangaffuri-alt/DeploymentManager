@@ -1,0 +1,24 @@
+﻿@model PasadorScript.ViewModels.MonacoDiffModel
+@using System.Text.Json
+@{
+    Layout = null;
+}
+<div class="modal-header">
+    <h5 class="modal-title">Comparar Archivos</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+</div>
+<div class="modal-body">
+
+    <div class="d-flex mb-2">
+        <button class="btn btn-sm btn-outline-primary me-2" onclick="setInlineMode()">Inline</button>
+        <button class="btn btn-sm btn-outline-primary me-2" onclick="setSideBySideMode()">Side by Side</button>
+        <button class="btn btn-sm btn-outline-secondary me-2" onclick="toggleLineNumbers()">Toggle Líneas</button>
+        <button class="btn btn-sm btn-outline-success me-2" onclick="nextDiff()">Siguiente Diferencia</button>
+        <button class="btn btn-sm btn-outline-success" onclick="previousDiff()">Anterior Diferencia</button>
+    </div>
+
+    <div id="diffEditorContainer" style="height:70vh;"></div>
+</div>
+<div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+</div>

@@ -1,0 +1,144 @@
+﻿@model PasadorScript.ViewModels.PRViewModel
+@{
+    ViewData["Title"] = $"PR #{Model.PRId} - Review";
+}
+
+<div class="container-fluid">
+    <!-- Header del PR -->
+    <div class="row bg-light py-3">
+        <div class="col">
+            <h1>PR de @Model.PRDetails.LastMergeSourceCommit.CommitId.Substring(0, 8) a main</h1>
+            <div class="d-flex align-items-center gap-3">
+                <span class="badge bg-@(Model.PRDetails.Status == "active" ? "success" : "secondary")">
+                    @Model.PRDetails.Status
+                </span>
+                <span>#@Model.PRId</span>
+                <span>@Model.PRDetails.Repository.Name</span>
+            </div>
+            <p class="text-muted">proposes to merge @Model.PRDetails.LastMergeSourceCommit.CommitId.Substring(0, 8) into main</p>
+        </div>
+    </div>
+
+    <!-- Controles de vista -->
+    <div class="row bg-white border-bottom py-2">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="fw-bold">@Model.Summary.TotalFilesChanged changed files</span>
+                    <span class="text-success">+@Model.Summary.TotalLinesAdded</span>
+                    <span class="text-danger">-@Model.Summary.TotalLinesDeleted</span>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <!-- Combo de modo de vista -->
+                    <form asp-action="ChangeViewMode" method="post" class="d-inline">
+                        <input type="hidden" name="prId" value="@Model.PRId" />
+                        <input type="hidden" name="filePath" value="@Model.SelectedFilePath" />
+                        <select name="viewMode" onchange="this.form.submit()" class="form-select form-select-sm">
+                            <option value="inline" selected="@(Model.ViewMode == "inline")">Inline</option>
+                            <option value="sidebyside" selected="@(Model.ViewMode == "sidebyside")">Side-by-side</option>
+                            <option value="unified" selected="@(Model.ViewMode == "unified")">Unified</option>
+                        </select>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Panel lateral con lista de archivos -->
+        <div class="col-md-3 bg-light border-end" style="height: calc(100vh - 150px); overflow-y: auto;">
+            <div class="py-3">
+                <h6 class="px-3">CHANGED FILES</h6>
+                <ul class="list-group list-group-flush">
+                    @foreach (var file in Model.Files)
+                    {
+                        var diff = Model.FileDiffs.ContainsKey(file.Path) ? Model.FileDiffs[file.Path] : null;
+                        <li class="list-group-item border-0 @(file.Path == Model.SelectedFilePath ? "bg-primary text-white" : "")">
+                            <a href="@Url.Action("Index", new { prId = Model.PRId, viewMode = Model.ViewMode, filePath = file.Path })"
+                               class="text-decoration-none @(file.Path == Model.SelectedFilePath ? "text-white" : "text-dark")">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span>@file.FileName</span>
+                                    @if (diff != null)
+                                    {
+                                        <span class="badge bg-@(file.Path == Model.SelectedFilePath ? "light text-dark" : "secondary")">
+                                            +@diff.AddedLines -@diff.DeletedLines
+                                        </span>
+                                        
+                                    }
+                                </div>
+                                <small class="text-muted">@file.Path</small>
+                            </a>
+                        </li>
+                        <!-- En la lista de archivos, después del badge -->
+                        @if (Model.FileDiffs.ContainsKey(file.Path))
+                        {
+                            <div class="mt-1">
+                                <form asp-action="OpenInMonaco" method="post" class="d-inline">
+                                    <input type="hidden" name="prId" value="@Model.PRId" />
+                                    <input type="hidden" name="filePath" value="@file.Path" />
+                                    <button type="submit" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-code-square"></i> Open in Editor
+                                    </button>
+                                </form>
+                            </div>
+                        }
+                    }
+                </ul>
+            </div>
+        </div>
+
+        <!-- Panel principal con diff -->
+        <div class="col-md-9" style="height: calc(100vh - 150px); overflow-y: auto;">
+            @if (!string.IsNullOrEmpty(Model.SelectedFilePath) && Model.FileDiffs.ContainsKey(Model.SelectedFilePath))
+            {
+                <div id="fileDiffContainer">
+                    <!-- Cargar el diff via AJAX -->
+                </div>
+            }
+            else
+            {
+                <div class="text-center py-5">
+                    <i class="bi bi-file-text fs-1 text-muted"></i>
+                    <p class="text-muted">Select a file to view changes</p>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            // Cargar el diff del archivo seleccionado
+        @if (!string.IsNullOrEmpty(Model.SelectedFilePath))
+        {
+            <text>
+                    loadFileDiff('@Model.SelectedFilePath', '@Model.ViewMode');
+            </text>
+        }
+
+                // Función para cargar diff via AJAX
+                function loadFileDiff(filePath, viewMode) {
+                    $('#fileDiffContainer').html('<div class="text-center py-4"><div class="spinner-border"></div></div>');
+
+                    $.get('@Url.Action("FileDiff")', {
+                        prId: @Model.PRId,
+                        filePath: filePath,
+                        viewMode: viewMode
+                    }, function (data) {
+                        $('#fileDiffContainer').html(data);
+                    }).fail(function () {
+                        $('#fileDiffContainer').html('<div class="alert alert-danger">Error loading file diff</div>');
+                    });
+                }
+
+            // Actualizar al cambiar archivo
+            $('.list-group-item a').on('click', function (e) {
+                e.preventDefault();
+                var url = $(this).attr('href');
+                window.location.href = url;
+            });
+        });
+    </script>
+}
