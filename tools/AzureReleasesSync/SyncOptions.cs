@@ -40,10 +40,17 @@ public sealed class SyncOptions
     /// <summary>Concurrencia máxima de llamadas a Azure.</summary>
     public int MaxDegreeOfParallelism { get; init; } = 4;
 
+    /// <summary>Fuerza backfill completo ignorando el watermark (config Sync:ForceBackfill o env Sync__ForceBackfill).</summary>
+    public bool ForceBackfill { get; init; }
+
     public static SyncOptions Load(IConfiguration config)
     {
         var conn = config.GetConnectionString("NuevoP229")
             ?? throw new InvalidOperationException("Falta ConnectionStrings:NuevoP229 en appsettings.json.");
+
+        // ForceBackfill: clave de config o variable de entorno Sync__ForceBackfill (reemplaza al viejo --force-backfill).
+        var forceBackfill = ReadBool(config, "Sync:ForceBackfill", false)
+            || string.Equals(Environment.GetEnvironmentVariable("Sync__ForceBackfill"), "true", StringComparison.OrdinalIgnoreCase);
 
         var host = config["AzureSettings:Host"] is { Length: > 0 } h ? h : "https://dev.azure.com";
         var vsrm = config["AzureSettings:EdpointVSRM:Host"];
@@ -94,11 +101,15 @@ public sealed class SyncOptions
             MaxPagesPerDefinition = ReadInt(config, "Sync:MaxPagesPerDefinition", 20),
             PageSize = ReadInt(config, "Sync:PageSize", 100),
             MaxDegreeOfParallelism = Math.Max(1, ReadInt(config, "Sync:MaxDegreeOfParallelism", 4)),
+            ForceBackfill = forceBackfill,
         };
     }
 
     private static int ReadInt(IConfiguration config, string key, int fallback) =>
         int.TryParse(config[key], NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : fallback;
+
+    private static bool ReadBool(IConfiguration config, string key, bool fallback) =>
+        bool.TryParse(config[key], out var v) ? v : fallback;
 }
 
 /// <summary>Par proyecto/definición de release de Azure DevOps.</summary>

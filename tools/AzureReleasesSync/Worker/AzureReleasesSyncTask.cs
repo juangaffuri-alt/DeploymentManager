@@ -1,10 +1,6 @@
+using AzureReleasesSync;
 
-// Al integrar esta clase en tu solución de scheduler:
-//   1) cambiá el namespace de abajo por el de tu proyecto (ej.: TuApp.Tasks);
-//   2) agregá la referencia al PackageReference "Bpn.SchedulerTasksCommon" y descomentá el using.
-// using Bpn.SchedulerTasksCommon;
-
-namespace AzureReleasesSync;
+namespace AzureReleasesSync.Worker;
 
 /// <summary>
 /// Task del scheduler (bpn.SchedulerTasksCommon) que vuelca releases de Azure DevOps
@@ -37,6 +33,9 @@ public class AzureReleasesSyncTask : ITask
 
     /// <summary>Nombre con el que el scheduler registra/logea la tarea.</summary>
     public string Name => "AzureReleasesSync";
+
+    /// <summary>Resultado de la última corrida (null si aún no corrió). Usado por el host para el exit code.</summary>
+    public SyncRunResult? LastResult { get; private set; }
 
     /// <summary>
     /// Punto de entrada que invoca el scheduler. Nunca lanza salvo cancelación:
@@ -93,7 +92,8 @@ public class AzureReleasesSyncTask : ITask
             repository,
             _loggerFactory.CreateLogger<ReleaseSyncService>());
 
-        var result = await service.RunAsync(forceFullBackfill, ct);
+        var result = await service.RunAsync(forceFullBackfill || options.ForceBackfill, ct);
+        LastResult = result;
 
         if (result.Success)
         {
