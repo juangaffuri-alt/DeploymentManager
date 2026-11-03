@@ -1,77 +1,34 @@
 using AzureReleasesSync;
+using AzureReleasesSync.Worker;
+using Microsoft.Extensions.DependencyInjection;
 
-var builder = Host.CreateApplicationBuilder(args);
-
-builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: false);
-
-// Argumentos reconocidos: --force-backfill  |  --backfill-days=N  |  --overlap-days=N
-var forceFullBackfill = args.Contains("--force-backfill", StringComparer.OrdinalIgnoreCase);
-if (TryGetOptionValue(args, "--backfill-days", out var backfillDays))
-    builder.Configuration["Sync:BackfillDays"] = backfillDays.ToString();
-if (TryGetOptionValue(args, "--overlap-days", out var overlapDays))
-    builder.Configuration["Sync:OverlapDays"] = overlapDays.ToString();
-
-builder.Logging.AddSimpleConsole(options =>
+var host = await WorkerHostBuilder.CreateWorkerHostAsync(args, (context, services) =>
 {
-    options.SingleLine = true;
-    options.TimestampFormat = "yyyy-MM-dd HH:mm:ss ";
-});
+    // Núcleo de sincronización: un solo registro ITask para toda la app.
+    // Scoped porque ReleaseRepository no es thread-safe y cada corrida debe ser aislada.
+    services.AddScoped<ITask, AzureReleasesSyncTask>();
 
-var options = SyncOptions.Load(builder.Configuration);
+    // MODO 1 (default): corrida única al arrancar el host y el proceso termina.
+    // Ideal para que un planificador externo (cron, systemd timer, Task Scheduler,
+    // o tu scheduler de Bpn.SchedulerTasksCommon) levante el binario a diario.
+    services.AddHostedService<RunOnceHostedService>();
 
-using var cts = new CancellationTokenSource();
-Console.CancelKeyPress += (_, e) =>
+    // MODO 2 (opcional): este mismo binario queda residente y se autodirige todos los
+    // días a la hora configurada en "Worker:RunAt" (default 03:00). Para activarlo,
+    // comentá la línea de arriba y descomentá esta:
+    //services.AddHostedService<AzureReleasesDailyRunner>();
+},
+serviceName: "AzureReleasesSync");
+
+await host.RunAsync();
+Console.WriteLine("Host finalizado");
+
+// Código de salida: 0 = última corrida exitosa, 1 = terminó con errores parciales,
+// 2 = nunca llegó a correr (config inválida / fallo fatal). En MODO 2 siempre 0
+// (el runner reporta por log; no aplica exit code por corrida).
+return host.Services.GetService<RunOnceHostedService>()?.LastResult switch
 {
-    e.Cancel = true;
-    cts.Cancel();
+    { } r when r.Success => 0,
+    { } => 1,
+    null => 2,
 };
-
-var loggerFactory = LoggerFactory.Create(logging => logging.AddSimpleConsole(o => o.SingleLine = true));
-
-// El worker/consola comparten el mismo núcleo: ReleaseSyncService.
-using var client = new AzureReleaseClient(options);
-var repository = new ReleaseRepository(options.ConnectionString);
-var service = new ReleaseSyncService(
-    options,
-    client,
-    repository,
-    loggerFactory.CreateLogger<ReleaseSyncService>());
-
-var startupLogger = loggerFactory.CreateLogger("AzureReleasesSync");
-
-startupLogger.LogInformation(
-    "AzureReleasesSync iniciado. Definiciones: {Count} | Backfill inicial: {Backfill} días | Overlap incremental: {Overlap} días",
-    options.Definitions.Count, options.BackfillDays, options.OverlapDays);
-
-try
-{
-    var result = await service.RunAsync(forceFullBackfill, cts.Token);
-    startupLogger.LogInformation(
-        "Corrida finalizada: {Upserted} releases, {Errors} errores, truncado={Truncated}. Exit code: {ExitCode} (0 = todo ok)",
-        result.ReleasesUpserted, result.Errors, result.Truncated, result.Success ? 0 : 1);
-    return result.Success ? 0 : 1;
-}
-catch (OperationCanceledException)
-{
-    Console.WriteLine("Sincronización cancelada por el usuario.");
-    return 130;
-}
-catch (Exception ex)
-{
-    Console.Error.WriteLine($"Fallo fatal en la sincronización de releases: {ex}");
-    return 2;
-}
-
-static bool TryGetOptionValue(string[] args, string name, out int value)
-{
-    value = 0;
-    var arg = args.FirstOrDefault(a => a.StartsWith($"{name}=", StringComparison.OrdinalIgnoreCase));
-    if (arg is not null)
-        return int.TryParse(arg[(name.Length + 1)..], out value);
-
-    var idx = Array.FindIndex(args, a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase));
-    if (idx >= 0 && idx + 1 < args.Length)
-        return int.TryParse(args[idx + 1], out value);
-
-    return false;
-}

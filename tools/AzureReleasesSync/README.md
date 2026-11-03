@@ -52,27 +52,50 @@ releases, incluido el JSON crudo (`RawJson`) como salvaguarda.
 # 2. Copiar appsettings.example.json -> appsettings.json y completar PAT y conexiones
 #    (o simplemente apuntar este proyecto al appsettings.json completo de PasadorScript:
 #     las secciones ConnectionStrings / AzureSettings / Projects tienen el mismo formato)
-dotnet run -c Release                    # corrida incremental (o backfill si está vacía)
-dotnet run -c Release -- --force-backfill
-dotnet run -c Release -- --backfill-days=200 --overlap-days=10
+dotnet run -c Release                                  # corrida incremental (o backfill si está vacía)
+Sync__ForceBackfill=true dotnet run -c Release         # backfill forzado completo
+Sync__BackfillDays=200 Sync__OverlapDays=10 dotnet run -c Release   # ventana custom
 ```
 
-Exit codes: `0` todo ok · `1` errores o datos truncados · `2` fallo fatal · `130` cancelado.
+El Program.cs replica el patrón de WorkerAfip:
+
+```csharp
+var host = await WorkerHostBuilder.CreateWorkerHostAsync(args, (context, services) =>
+{
+    services.AddScoped<ITask, AzureReleasesSyncTask>();   // la unidad de trabajo
+    services.AddHostedService<RunOnceHostedService>();   // corre al arrancar y termina
+},
+serviceName: "AzureReleasesSync");
+
+await host.RunAsync();
+```
+
+Exit codes: `0` todo ok · `1` errores o datos truncados · `2` fallo fatal.
 
 ## Modo worker diario (ITask de Bpn.SchedulerTasksCommon)
 
-Existe además una unidad de trabajo lista para enchufar al scheduler:
-`Worker/AzureReleasesSyncTask.cs` → clase `AzureReleasesSyncTask : ITask`.
+El corazón del proyecto es `Worker/AzureReleasesSyncTask.cs` → clase `AzureReleasesSyncTask : ITask`:
 
-- Implementa `Name` y `Run(CancellationToken)`; el host del scheduler la invoca **diariamente**
-  (igual que WorkerAfip). No hace falta programar ningún cron propio.
+- Implementa `Name` y `Run(CancellationToken)`; el scheduling lo maneja tu scheduler, no esta clase.
 - `Run` nunca lanza salvo cancelación: loguea OK/errores y deja constancia en
   `dbo.AzureReleaseSyncLog`. Si una corrida falla, el watermark no avanza y la corrida
   del día siguiente recupera automáticamente la ventana perdida (solapamiento de 7 días).
 - Primera corrida = backfill de 364 días; las siguientes son incrementales. Misma lógica
-  y mismo núcleo (`ReleaseSyncService`) que la consola: cero duplicación de código.
+  núcleo (`ReleaseSyncService`) en todos los modos: cero duplicación de código.
 - Backfill manual desde código/admin: `await task.RunBackfillAsync(ct)` (equivale a
-  `--force-backfill` de la consola).
+  correr la app con la variable de entorno `Sync:ForceBackfill=true`).
+
+### Los dos modos de alojamiento (se eligen en Program.cs)
+
+| Modo | HostedService | Comportamiento |
+|---|---|---|
+| **MODO 1 (default)** | `RunOnceHostedService` | Corre la `ITask` una vez al arrancar y el proceso termina con exit code. Ideal para que tu scheduler / cron / Task Scheduler levante el binario a diario. |
+| **MODO 2** | `AzureReleasesDailyRunner` | El binario queda residente y se autodirige todos los días a la hora de `Worker:RunAt` (default `03:00`). Para activarlo: comentá `AddHostedService<RunOnceHostedService>()` y descomentá `AddHostedService<AzureReleasesDailyRunner>()`. |
+
+> `Worker/WorkerHostBuilder.cs` es un stub local con la misma firma que el de
+> `Bpn.SchedulerTasksCommon` (`CreateWorkerHostAsync(args, (context, services) => {...}, serviceName:)`)
+> para que este repo compile aislado. Al llevar el código a tu solución, borrá ese archivo
+> y usá el `WorkerHostBuilder` real de la librería — tu `Program.cs` queda idéntico al de WorkerAfip.
 
 ### Pasos para integrarlo en tu solución del scheduler
 
@@ -80,21 +103,20 @@ Existe además una unidad de trabajo lista para enchufar al scheduler:
    `SyncOptions.cs`, `SyncRunResult.cs`, `AzureReleaseClient.cs`, `ReleaseSyncService.cs`,
    `ReleaseRepository.cs`, `Models/AzureReleaseItem.cs`, `GlobalUsings.cs` y
    `Worker/AzureReleasesSyncTask.cs`.
-2. En `AzureReleasesSyncTask.cs`: cambiá el namespace por el de tu proyecto, descomentá
+2. En `AzureReleasesSyncTask.cs`: cambiá el namespace por el de tu proyecto, agregá
    `using Bpn.SchedulerTasksCommon;` y **borrá el bloque `#if !TASKSLIB ... #endif`** del
    final (es sólo un stub para que este repo compile aislado; la interfaz real viene del
    paquete). Si tu `ITask` define el método con otro nombre (p. ej. `ExecuteAsync`),
    renombralo en la clase; el cuerpo no cambia.
 3. Agregá el `PackageReference` `Microsoft.Data.SqlClient` al proyecto que lo reciba
    (el resto —`IConfiguration`, `ILoggerFactory`— ya lo provee el host).
-4. Registrala donde tu scheduler registre sus tasks (patrón WorkerAfip), p. ej.:
+4. Registrala en el lambda de `WorkerHostBuilder.CreateWorkerHostAsync`, igual que en WorkerAfip:
    ```csharp
-   services.AddSingleton<AzureReleasesSyncTask>();
-   // y en la configuración/lista de tasks del scheduler: typeof(AzureReleasesSyncTask)
+   services.AddScoped<ITask, AzureReleasesSyncTask>();
    ```
+   y programala con frecuencia diaria desde tu scheduler (recomendado: fuera del pico, p. ej. 03:00 hs).
 5. Copiá las secciones `ConnectionStrings:NuevoP229`, `AzureSettings`, `Projects` y `Sync`
    al `appsettings.json` del host del scheduler (mismo formato que PasadorScript).
-6. Programala con frecuencia diaria (recomendado: fuera del pico, p. ej. 03:00 hs).
 
 La consola sigue disponible para ejecuciones puntuales/backfills forzados desde línea de
 comandos; ambos modos comparten exactamente la misma lógica de sincronización.
